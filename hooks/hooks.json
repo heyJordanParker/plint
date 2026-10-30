@@ -1,0 +1,6 @@
+{
+  "description": "plint hooks module",
+  "modules": [
+    "./register.ts"
+  ]
+}
