@@ -1,0 +1,27 @@
+{
+  "name": "plint",
+  "owner": {
+    "name": "heyJordanParker"
+  },
+  "description": "Lints Claude Code Prompts: every edit to a Claude.md, rule, Skill, or agent file is checked against your static and agentic rules, and an error refuses the edit.",
+  "plugins": [
+    {
+      "name": "plint",
+      "description": "Lints Claude Code Prompts: every edit to a Claude.md, rule, Skill, or agent file is checked against your static and agentic rules, and an error refuses the edit.",
+      "source": {
+        "source": "archive",
+        "url": "https://github.com/heyJordanParker/plint/releases/download/v0.1.0/plint-0.1.0.zip",
+        "sha256": "3c664403aefd2e88b1427968a26eb2fece3a1003ceaf847264489168fa35ca93"
+      }
+    },
+    {
+      "name": "cmod",
+      "description": "Claude Mod Manager: runs the uninstall step of each mod Claude Code removes",
+      "source": {
+        "source": "url",
+        "url": "https://github.com/heyJordanParker/cmod.git",
+        "ref": "release"
+      }
+    }
+  ]
+}
