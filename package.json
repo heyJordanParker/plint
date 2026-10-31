@@ -1,0 +1,19 @@
+{
+  "name": "plint",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "bun test"
+  },
+  "cmod": {
+    "program": "plint"
+  },
+  "files": [
+    "hooks",
+    "src",
+    "skills"
+  ],
+  "dependencies": {
+    "@cmodjs/core": "^5.1.1"
+  }
+}
