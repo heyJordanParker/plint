@@ -1,3 +1,4 @@
+#!/usr/bin/env bun
 import { existsSync, realpathSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { parseArgs } from 'node:util'

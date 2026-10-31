@@ -1,9 +1,26 @@
 {
-  "name": "plint",
+  "name": "@cmodjs/plint",
   "version": "0.1.0",
   "description": "Lints Claude Code Prompts against static and agentic rules.",
-  "private": true,
+  "license": "MIT",
   "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/heyJordanParker/plint.git",
+    "directory": "cli"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "bin": {
+    "plint": "src/main.ts"
+  },
+  "exports": {
+    ".": "./src/api.ts"
+  },
+  "files": [
+    "src"
+  ],
   "scripts": {
     "build": "for machine in ${CMOD_MACHINES:-darwin-arm64 darwin-x64 linux-arm64 linux-x64}; do bun build --compile --minify --target=bun-$machine src/main.ts --outfile dist/plint-$machine || exit 1; done",
     "check": "tsc --noEmit",

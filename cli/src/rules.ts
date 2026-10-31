@@ -19,6 +19,7 @@ export type StaticRule = Common & {
 
 export type AgenticRule = Common & {
   readonly kind: 'agentic'
+  readonly description: string
   readonly body: string
   readonly agent: string | undefined
   readonly model: string | undefined
@@ -100,6 +101,7 @@ async function agenticRule(id: string, folder: string, source: string): Promise<
     level: (metadata.level as Level | undefined) ?? 'error',
     runs: (metadata.runs as Runs | undefined) ?? 'edit',
     paths: pathsOf(source, frontmatter.paths),
+    description: frontmatter.description as string,
     body,
     agent: frontmatter.agent as string | undefined,
     model: frontmatter.model as string | undefined,

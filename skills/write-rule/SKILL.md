@@ -54,8 +54,8 @@ metadata:
 A Domain.md word names the business, never code. Report each sentence that uses a Domain.md word to name a file, method, or class.
 ```
 
-- `context: fork` is required. plint runs each agentic rule as its own Claude Code session in the project, so it reads the project's Claude.md files.
-- `agent` names the agent the session runs as, which sets its system prompt and tools.
+- `context: fork` is required. plint runs each agentic rule the way Claude Code runs a forked Skill, in a subagent in the project, so it reads the project's Claude.md files.
+- `agent` names the subagent type, `general-purpose` when it is left out. That agent's frontmatter applies: its tools, its model, and the Skills it preloads.
 - `model`, `effort`, `allowed-tools`, and `disallowed-tools` work as in any Skill. No rule can edit a file.
 - `metadata.level` is `error` or `warning`, `error` by default.
 - `metadata.runs` is `edit`, the default, or `manual`. A manual rule runs only when someone runs `plint` or `/plint`. Make a rule manual when it needs more than the config's `editTimeout`, 30 seconds by default.

@@ -46,7 +46,18 @@ function write(file: string, text: string): string {
 }
 
 function fakeClaude(answer: string, delaySeconds = 0): string {
-  const program = write(join(home, 'claude'), `#!/bin/sh\nprintf '%s\\n' "$*" >> '${calls}'\ncat > /dev/null\nsleep ${delaySeconds}\ncat <<'JSON'\n${answer}\nJSON\n`)
+  const program = write(join(home, 'claude'), `#!/bin/sh
+printf '%s\\n' "$*" >> '${calls}'
+while [ $# -gt 0 ]; do
+  if [ "$1" = "--plugin-dir" ]; then cat "$2/skills/check/SKILL.md" >> '${calls}'; fi
+  shift
+done
+cat > /dev/null
+sleep ${delaySeconds}
+cat <<'JSON'
+${answer}
+JSON
+`)
   chmodSync(program, 0o755)
   return program
 }
@@ -116,13 +127,22 @@ test('a config that names a rule no plugin holds fails loudly', () => {
   expect(run.stderr).toContain('sets the rule "global/no-such-rule", which no plugin holds')
 })
 
-test('an agentic rule runs Claude Code with its Skill frontmatter, and its findings refuse the edit', () => {
+test('an agentic rule runs as a forked Skill with its own frontmatter, and its findings refuse the edit', () => {
   agenticRule('block-domain-words-for-code', 'agent: explorer\nmodel: haiku\neffort: low\nallowed-tools: Read\npaths:\n  - "**/Claude.md"\nmetadata:\n  level: error')
-  const claude = fakeClaude('{"type":"result","is_error":false,"structured_output":{"findings":[{"line":1,"message":"Slice names a commit here."}]}}')
+  const claude = fakeClaude('{"type":"result","is_error":false,"result":"{\\"findings\\": [{\\"line\\": 1, \\"message\\": \\"Slice names a commit here.\\"}]}"}')
   const answer = edit('Write', { file_path: join(project, 'Claude.md'), content: 'Each Slice is a commit.\n' }, claude)
   expect(answer.refuse).toContain('1  error  global/block-domain-words-for-code  Slice names a commit here.')
-  const argv = readFileSync(calls, 'utf8')
-  for (const part of ['-p', '--output-format json', '--agent explorer', '--model haiku', '--effort low', '--allowedTools Read', '--disallowedTools Edit Write MultiEdit NotebookEdit', '{"disableAllHooks":true}']) expect(argv).toContain(part)
+  const recorded = readFileSync(calls, 'utf8')
+  for (const part of ['-p', '--output-format stream-json', '--plugin-dir', '{"disableAllHooks":true}', '"context":"fork"', '"agent":"explorer"', '"model":"haiku"', '"effort":"low"', '"allowed-tools":["Read"]', '"disallowed-tools":["Edit","Write","MultiEdit","NotebookEdit"]', '1 | Each Slice is a commit.']) expect(recorded).toContain(part)
+})
+
+test("an agentic rule's findings count when its subagent answers through the StructuredOutput tool", () => {
+  agenticRule('require-true-facts', 'model: sonnet')
+  const stream = [
+    '{"type":"assistant","parent_tool_use_id":"forked-command-plint-rule:check","message":{"content":[{"type":"tool_use","name":"StructuredOutput","input":{"findings":[{"line":1,"message":"The code says otherwise."}]}}]}}',
+    '{"type":"result","subtype":"success","is_error":false,"result":"Command completed"}',
+  ].join('\n')
+  expect(edit('Write', { file_path: join(project, 'Claude.md'), content: 'A fact.\n' }, fakeClaude(stream)).refuse).toContain('1  error  global/require-true-facts  The code says otherwise.')
 })
 
 test('a manual rule never runs on an edit, and runs when plint runs', () => {

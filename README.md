@@ -10,6 +10,8 @@ plint refused this edit to packages/claude/rules/scope.md. Fix every error, then
 
 plint is a [cmod](https://claudemodmanager.com) mod. Install it with `cmod install heyJordanParker/plint`, which also puts the `plint` program on your `PATH`.
 
+A project with a `package.json` adds `@cmodjs/plint` as a dev dependency, for the types its rule files and config import and for `bun plint` in its scripts.
+
 ## Configure it
 
 plint reads two configs and merges them, the project's over yours:
@@ -56,7 +58,7 @@ export default defineRule({
 })
 ```
 
-An agentic rule is a Skill folder in a rule folder. Its frontmatter is Claude Code's Skill frontmatter, with plint's `level` and `runs` under `metadata`, and its body is the check. plint runs it as its own Claude Code session in the project, so it reads the project's Claude.md files.
+An agentic rule is a Skill folder in a rule folder. Its frontmatter is Claude Code's Skill frontmatter, with plint's `level` and `runs` under `metadata`, and its body is the check. plint runs it the way Claude Code runs any `context: fork` Skill: in a subagent in the project, which reads the project's Claude.md files. `agent` picks the subagent, whose own frontmatter applies, its preloaded Skills included.
 
 ```md
 ---

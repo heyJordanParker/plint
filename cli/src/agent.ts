@@ -1,6 +1,12 @@
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import type { Finding, PromptFile } from './api.ts'
 import { isRecord } from './config.ts'
 import type { AgenticRule } from './rules.ts'
+
+const PLUGIN = 'plint-rule'
+const SKILL = 'check'
 
 const SCHEMA = {
   type: 'object',
@@ -25,29 +31,42 @@ export function claudeProgram(): string {
   return program
 }
 
-export function agentArguments(rule: AgenticRule): string[] {
-  const list = (tools: string | readonly string[] | undefined): string[] => (tools === undefined ? [] : typeof tools === 'string' ? [tools] : [...tools])
-  const allowed = list(rule.allowedTools)
+export function sessionArguments(plugin: string): string[] {
   return [
     '-p',
-    '--output-format', 'json',
+    '--output-format', 'stream-json',
+    '--verbose',
     '--json-schema', JSON.stringify(SCHEMA),
     '--no-session-persistence',
     '--permission-prompts', 'none',
     '--settings', JSON.stringify({ disableAllHooks: true }),
-    ...(rule.agent === undefined ? [] : ['--agent', rule.agent]),
-    ...(rule.model === undefined ? [] : ['--model', rule.model]),
-    ...(rule.effort === undefined ? [] : ['--effort', rule.effort]),
-    ...(allowed.length === 0 ? [] : ['--allowedTools', ...allowed]),
-    '--disallowedTools', ...WRITE_TOOLS, ...list(rule.disallowedTools),
+    '--plugin-dir', plugin,
+    '--model', 'haiku',
+    '--disallowedTools', ...WRITE_TOOLS,
   ]
 }
 
-export function agentPrompt(rule: AgenticRule, file: PromptFile, changed: readonly number[] | undefined): string {
+export function ruleSkill(rule: AgenticRule, file: PromptFile, changed: readonly number[] | undefined): string {
+  const list = (tools: string | readonly string[] | undefined): string[] => (tools === undefined ? [] : typeof tools === 'string' ? tools.split(/[\s,]+/).filter((tool) => tool !== '') : [...tools])
+  const allowed = list(rule.allowedTools)
+  const frontmatter = {
+    name: SKILL,
+    description: rule.description,
+    context: 'fork',
+    ...(rule.agent === undefined ? {} : { agent: rule.agent }),
+    ...(rule.model === undefined ? {} : { model: rule.model }),
+    ...(rule.effort === undefined ? {} : { effort: rule.effort }),
+    ...(allowed.length === 0 ? {} : { 'allowed-tools': allowed }),
+    'disallowed-tools': [...WRITE_TOOLS, ...list(rule.disallowedTools)],
+  }
   const width = String(file.lines.length).length
   const numbered = file.lines.map((line, index) => `${String(index + 1).padStart(width)} | ${line}`).join('\n')
   const edit = changed === undefined ? '' : `\n\nThis is the file as an edit will leave it. The edit wrote lines ${changed.length === 0 ? '(none, it only removed lines)' : changed.join(', ')}.`
-  return `${rule.body}
+  return `---
+${JSON.stringify(frontmatter)}
+---
+
+${rule.body}
 
 ---
 
@@ -55,13 +74,26 @@ Check the file \`${file.path}\` against the rule above. Its lines, numbered:
 
 ${numbered}${edit}
 
-Answer with one finding per line that breaks the rule: its line number, and a message that tells the author what to change. A line that follows the rule gets no finding, so never write a finding that says a line is fine. When every line follows the rule, answer an empty findings list. Change no file.`
+Answer only with a JSON object of the form {"findings": [{"line": <number>, "message": "<what the author changes>"}]}: one finding per line that breaks the rule. A line that follows the rule gets no finding, so never write a finding that says a line is fine. When every line follows the rule, answer {"findings": []}. Change no file.`
 }
 
 export async function runAgentic(rule: AgenticRule, file: PromptFile, root: string, changed: readonly number[] | undefined, timeoutMs: number): Promise<readonly Finding[]> {
-  const child = Bun.spawn([claudeProgram(), ...agentArguments(rule)], {
+  const plugin = mkdtempSync(join(tmpdir(), 'plint-rule-'))
+  try {
+    mkdirSync(join(plugin, '.claude-plugin'))
+    writeFileSync(join(plugin, '.claude-plugin', 'plugin.json'), JSON.stringify({ name: PLUGIN, version: '0.0.0', description: `Runs ${rule.id} for plint.` }))
+    mkdirSync(join(plugin, 'skills', SKILL), { recursive: true })
+    writeFileSync(join(plugin, 'skills', SKILL, 'SKILL.md'), ruleSkill(rule, file, changed))
+    return await runSession(plugin, root, timeoutMs)
+  } finally {
+    rmSync(plugin, { recursive: true, force: true })
+  }
+}
+
+async function runSession(plugin: string, root: string, timeoutMs: number): Promise<readonly Finding[]> {
+  const child = Bun.spawn([claudeProgram(), ...sessionArguments(plugin)], {
     cwd: root,
-    stdin: new Blob([agentPrompt(rule, file, changed)]),
+    stdin: new Blob([`/${PLUGIN}:${SKILL}`]),
     stdout: 'pipe',
     stderr: 'pipe',
   })
@@ -79,15 +111,26 @@ export async function runAgentic(rule: AgenticRule, file: PromptFile, root: stri
 }
 
 export function findingsOf(stdout: string): readonly Finding[] {
-  const answer: unknown = JSON.parse(stdout)
-  if (!isRecord(answer)) throw new Error('claude answered no result object')
+  const events: unknown[] = stdout.trim().split('\n').map((line) => JSON.parse(line))
+  const answer = events.at(-1)
+  if (!isRecord(answer) || answer.type !== 'result') throw new Error('claude answered no result event')
   if (answer.is_error === true) throw new Error(`claude failed: ${String(answer.result ?? answer.subtype ?? 'no reason')}`)
-  const structured = isRecord(answer.structured_output) ? answer.structured_output : parsedResult(answer.result)
+  const structured = structuredOutputOf(events) ?? parsedResult(answer.result)
   if (!isRecord(structured) || !Array.isArray(structured.findings)) throw new Error(`claude answered no findings: ${String(answer.result ?? '').slice(0, 200)}`)
   return structured.findings.map((finding: unknown) => {
     if (!isRecord(finding) || !Number.isInteger(finding.line) || typeof finding.message !== 'string') throw new Error(`claude answered a finding without a line and a message: ${JSON.stringify(finding)}`)
     return { line: finding.line as number, message: finding.message }
   })
+}
+
+function structuredOutputOf(events: readonly unknown[]): unknown {
+  const answers = events.flatMap((event) => {
+    if (!isRecord(event)) return []
+    if (event.type === 'result' && isRecord(event.structured_output)) return [event.structured_output]
+    const content = isRecord(event.message) && Array.isArray(event.message.content) ? event.message.content : []
+    return content.filter((block: unknown) => isRecord(block) && block.type === 'tool_use' && block.name === 'StructuredOutput').map((block: Record<string, unknown>) => block.input)
+  })
+  return answers.at(-1)
 }
 
 function parsedResult(result: unknown): unknown {
