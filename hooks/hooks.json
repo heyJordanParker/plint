@@ -1,5 +1,5 @@
 {
-  "description": "plint hooks module",
+  "description": "rulebook hooks module",
   "modules": [
     "./register.ts"
   ]

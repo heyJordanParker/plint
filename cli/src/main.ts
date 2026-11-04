@@ -1,26 +1,28 @@
 #!/usr/bin/env bun
-import { existsSync, realpathSync } from 'node:fs'
-import { resolve } from 'node:path'
+import { existsSync, realpathSync, statSync } from 'node:fs'
+import { dirname, resolve } from 'node:path'
 import { parseArgs } from 'node:util'
 import packageJson from '../package.json' with { type: 'json' }
-import { checkFile, type FileReport } from './check.ts'
-import { isRecord, loadSettings } from './config.ts'
-import { checkEdit } from './edit.ts'
-import { probeFiles, promptFiles } from './files.ts'
+import { checkFile, displayPath, isCovered, isPrompt, lintProject } from './check.ts'
+import { loadSettings, projectRoot, type Settings } from './config.ts'
+import { filesBySettings, importedFiles, listedFiles, probeFiles, projectFiles } from './files.ts'
+import { answer, projectOf, type Question } from './questions.ts'
 import { textReport } from './report.ts'
 import { loadRules } from './rules.ts'
+import { serve } from './serve.ts'
 
-const MANUAL_TIMEOUT_MS = 600_000
-
-const HELP = `plint ${packageJson.version}: lints Claude Code Prompts against static and agentic rules.
+const HELP = `rulebook ${packageJson.version}: lints Claude Code Prompts against static and agentic rules.
 
 Usage:
-  plint [files...]           Check every Prompt and probe of this project, or only the files named, with every rule.
-  plint --static [files...]  Check with the static rules only.
-  plint --json [files...]    Print the results as JSON.
-  plint edit                 Check the Edit, Write, or MultiEdit call Claude Code sends on stdin, before it runs.
+  rulebook [files...]           Check every Prompt and probe of this project, or only the files named, with every rule.
+  rulebook --static [files...]  Check with the static rules only.
+  rulebook --json [files...]    Print the results as JSON.
+  rulebook edit                 Check the Edit, Write, or MultiEdit call Claude Code sends on stdin, before it runs.
+  rulebook text <@name>         Check the message on stdin, such as @reply, with every rule whose paths cover its @-name.
+  rulebook rules                Print, for each folder that holds a rulebook.config.ts, each rule that is on there, with its description and the paths it covers, and each message with the tools that send it, as JSON.
+  rulebook serve                Answer edit, text, and rules as POST /edit, /text, and /rules on a Unix socket, keeping each project's configs and rules loaded, and print unix:<socket path> first.
 
-Rules and settings come from ~/.config/plint/plint.config.ts and the project's plint.config.ts.`
+A file's rules and settings come from ~/.config/rulebook/rulebook.config.ts and the nearest rulebook.config.ts in the file's folder or a folder above it, with every config they extend.`
 
 async function main(argv: readonly string[]): Promise<number> {
   const { values, positionals } = parseArgs({
@@ -30,28 +32,50 @@ async function main(argv: readonly string[]): Promise<number> {
   })
   if (values.version) return print(packageJson.version)
   if (values.help) return print(HELP)
-  if (positionals[0] === 'edit') return edit()
+  if (positionals[0] === 'serve') return serve()
+  if (positionals[0] === 'edit') return asked('edit', JSON.parse(await Bun.stdin.text()))
+  if (positionals[0] === 'text') return asked('text', { name: positionals[1] ?? '', text: await Bun.stdin.text(), cwd: process.cwd() })
+  if (positionals[0] === 'rules') return asked('rules', { cwd: process.cwd() })
   return check(positionals, values.static === true, values.json === true)
 }
 
-async function edit(): Promise<number> {
-  const call: unknown = JSON.parse(await Bun.stdin.text())
-  if (!isRecord(call) || typeof call.tool_name !== 'string' || !isRecord(call.tool_input) || typeof call.cwd !== 'string') throw new Error('plint edit reads {"tool_name", "tool_input", "cwd"} on stdin.')
-  return print(JSON.stringify(await checkEdit({ tool_name: call.tool_name, tool_input: call.tool_input, cwd: call.cwd })))
+async function asked(question: Question, input: unknown): Promise<number> {
+  return print(JSON.stringify(await answer(question, input, projectOf(question, input))))
 }
 
 async function check(named: readonly string[], isStatic: boolean, isJson: boolean): Promise<number> {
-  const settings = await loadSettings(process.cwd())
-  const rules = await loadRules(settings)
-  const files = named.length > 0 ? named.map((file) => realFile(file)) : [...promptFiles(settings), ...probeFiles(settings)]
-  const reports: FileReport[] = []
-  for (const file of files) {
-    const report = await checkFile(settings, rules, file, await Bun.file(file).text(), { scope: isStatic ? 'static' : 'all', timeoutMs: MANUAL_TIMEOUT_MS })
-    if (report === undefined) throw new Error(`${file} is not a Prompt or a probe of any plint config.`)
-    reports.push(report)
-  }
+  const listing = listedFiles(process.cwd())
+  const root = projectRoot(process.cwd(), process.cwd())
+  const settings = await loadSettings(process.cwd(), root)
+  const groups = new Map<Settings, readonly string[]>([[settings, []], ...(await filesBySettings(root, projectFiles(settings, await listing)))])
+  const imported = importedFiles(root, groups)
+  const files = named.length > 0 ? named.map((file) => realFile(file)) : await textFiles([...new Set([...(await coveredFiles(groups)), ...imported, ...messageFiles(settings)])])
+  const checked = await Promise.all(files.map(async (file) => {
+    const own = displayPath(settings, file).startsWith('@') ? settings : await loadSettings(dirname(file), root)
+    const report = await checkFile(own, await loadRules(own), file, await Bun.file(file).text(), { scope: isStatic ? 'static' : 'all', imported: async () => imported })
+    if (report === undefined && named.length > 0) throw new Error(`${file} is not a Prompt, a probe, or a file a rule's paths cover.`)
+    return report
+  }))
+  const reports = await lintProject(groups, checked.filter((report) => report !== undefined), named.length > 0 ? files : undefined)
   await print(isJson ? JSON.stringify({ reports }) : textReport(reports))
   return reports.some(({ findings, failures }) => failures.length > 0 || findings.some(({ level }) => level === 'error')) ? 1 : 0
+}
+
+async function coveredFiles(groups: ReadonlyMap<Settings, readonly string[]>): Promise<readonly string[]> {
+  const covered = await Promise.all([...groups].map(async ([settings, files]) => {
+    const rules = await loadRules(settings)
+    return [...files.filter((file) => isPrompt(settings, file) || isCovered(settings, rules, file)), ...probeFiles(settings)]
+  }))
+  return covered.flat()
+}
+
+function messageFiles(settings: Settings): readonly string[] {
+  return Object.values(settings.messages).flatMap(({ folder }) => (folder === undefined || !existsSync(folder) ? [] : [...new Bun.Glob('**').scanSync({ cwd: folder, absolute: true, dot: true })]))
+}
+
+async function textFiles(files: readonly string[]): Promise<readonly string[]> {
+  const texts = await Promise.all(files.map(async (file) => statSync(file, { throwIfNoEntry: false })?.isFile() === true && !(await Bun.file(file).slice(0, 8000).bytes()).includes(0)))
+  return files.filter((_, index) => texts[index])
 }
 
 function realFile(file: string): string {
@@ -68,7 +92,7 @@ async function print(text: string): Promise<number> {
 main(Bun.argv.slice(2)).then(
   (code) => process.exit(code),
   (error: unknown) => {
-    process.stderr.write(`plint: ${error instanceof Error ? error.message : String(error)}\n`)
+    process.stderr.write(`rulebook: ${error instanceof Error ? error.message : String(error)}\n`)
     process.exit(2)
   },
 )

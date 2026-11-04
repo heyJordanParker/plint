@@ -1,19 +1,19 @@
 {
-  "name": "@cmodjs/plint",
+  "name": "@cmodjs/rulebook",
   "version": "0.1.0",
   "description": "Lints Claude Code Prompts against static and agentic rules.",
   "license": "MIT",
   "type": "module",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/heyJordanParker/plint.git",
+    "url": "git+https://github.com/heyJordanParker/rulebook.git",
     "directory": "cli"
   },
   "publishConfig": {
     "access": "public"
   },
   "bin": {
-    "plint": "src/main.ts"
+    "rulebook": "src/main.ts"
   },
   "exports": {
     ".": "./src/api.ts"
@@ -22,7 +22,7 @@
     "src"
   ],
   "scripts": {
-    "build": "for machine in ${CMOD_MACHINES:-darwin-arm64 darwin-x64 linux-arm64 linux-x64}; do bun build --compile --minify --target=bun-$machine src/main.ts --outfile dist/plint-$machine || exit 1; done",
+    "build": "bun build.ts",
     "check": "tsc --noEmit",
     "test": "bun test"
   },
@@ -32,6 +32,24 @@
   },
   "devDependencies": {
     "@types/bun": "^1.2.21",
+    "@types/picomatch": "4.0.3",
     "typescript": "^5.9.2"
+  },
+  "dependencies": {
+    "@ast-grep/lang-bash": "0.0.8",
+    "@ast-grep/lang-json": "0.0.7",
+    "@ast-grep/lang-lua": "0.0.7",
+    "@ast-grep/lang-markdown": "0.0.6",
+    "@ast-grep/lang-php": "0.0.7",
+    "@ast-grep/lang-python": "0.0.6",
+    "@ast-grep/lang-toml": "0.0.9",
+    "@ast-grep/lang-yaml": "0.0.6",
+    "@ast-grep/napi": "0.51.1",
+    "@biomejs/biome": "2.6.4",
+    "diff": "9.0.0",
+    "marked": "15.0.0",
+    "oxlint": "1.86.0",
+    "picomatch": "4.0.7",
+    "stylelint": "17.15.0"
   }
 }

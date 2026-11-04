@@ -1,6 +1,6 @@
 export type Level = 'error' | 'warning'
 
-export type Runs = 'edit' | 'manual'
+export type Runs = 'always' | 'manual'
 
 export type PromptFile = {
   readonly path: string
@@ -10,10 +10,11 @@ export type PromptFile = {
 
 export type Finding = {
   readonly line: number
-  readonly message: string
+  readonly message?: string
 }
 
 export type Rule = {
+  readonly description: string
   readonly level?: Level
   readonly runs?: Runs
   readonly paths?: readonly string[]
@@ -24,18 +25,24 @@ export type RuleSettings = {
   readonly level?: Level | 'off'
   readonly runs?: Runs
   readonly paths?: readonly string[]
+  readonly timeout?: number
   readonly agent?: string
   readonly model?: string
   readonly effort?: string
 }
 
+export type LinterName = 'mago' | 'oxlint' | 'biome' | 'stylelint' | 'ruff' | 'selene' | 'shellcheck'
+
 export type Config = {
+  readonly extends?: readonly (string | Config)[]
   readonly plugins?: Readonly<Record<string, string>>
   readonly paths?: readonly string[]
   readonly probes?: readonly string[]
-  readonly editTimeout?: number
+  readonly timeout?: number
   readonly existingErrors?: Level
   readonly rules?: Readonly<Record<string, Level | 'off' | RuleSettings>>
+  readonly linters?: readonly LinterName[]
+  readonly messages?: Readonly<Record<string, { readonly tools?: readonly string[]; readonly folder?: string }>>
 }
 
 export function defineRule(rule: Rule): Rule {
@@ -45,3 +52,5 @@ export function defineRule(rule: Rule): Rule {
 export function defineConfig(config: Config): Config {
   return config
 }
+
+export const recommended = defineConfig({ rules: { 'rulebook/imports': 'error' } })

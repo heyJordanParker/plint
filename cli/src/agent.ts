@@ -5,7 +5,7 @@ import type { Finding, PromptFile } from './api.ts'
 import { isRecord } from './config.ts'
 import type { AgenticRule } from './rules.ts'
 
-const PLUGIN = 'plint-rule'
+const PLUGIN = 'rulebook-rule'
 const SKILL = 'check'
 
 const SCHEMA = {
@@ -25,13 +25,13 @@ const SCHEMA = {
 
 const WRITE_TOOLS = ['Edit', 'Write', 'MultiEdit', 'NotebookEdit']
 
-export function claudeProgram(): string {
-  const program = process.env.CLAUDE_CODE_EXECPATH || Bun.which('claude')
-  if (!program) throw new Error('plint runs agentic rules with Claude Code, and finds no claude on PATH.')
+function claudeProgram(): string {
+  const program = Bun.which('claude', { PATH: process.env.PATH ?? '' })
+  if (!program) throw new Error('rulebook runs agentic rules with Claude Code, and finds no claude on PATH.')
   return program
 }
 
-export function sessionArguments(plugin: string): string[] {
+function sessionArguments(plugin: string): string[] {
   return [
     '-p',
     '--output-format', 'stream-json',
@@ -46,7 +46,7 @@ export function sessionArguments(plugin: string): string[] {
   ]
 }
 
-export function ruleSkill(rule: AgenticRule, file: PromptFile, changed: readonly number[] | undefined): string {
+function ruleSkill(rule: AgenticRule, file: PromptFile, changed: readonly number[] | undefined): string {
   const list = (tools: string | readonly string[] | undefined): string[] => (tools === undefined ? [] : typeof tools === 'string' ? tools.split(/[\s,]+/).filter((tool) => tool !== '') : [...tools])
   const allowed = list(rule.allowedTools)
   const frontmatter = {
@@ -77,40 +77,37 @@ ${numbered}${edit}
 Answer only with a JSON object of the form {"findings": [{"line": <number>, "message": "<what the author changes>"}]}: one finding per line that breaks the rule. A line that follows the rule gets no finding, so never write a finding that says a line is fine. When every line follows the rule, answer {"findings": []}. Change no file.`
 }
 
-export async function runAgentic(rule: AgenticRule, file: PromptFile, root: string, changed: readonly number[] | undefined, timeoutMs: number): Promise<readonly Finding[]> {
-  const plugin = mkdtempSync(join(tmpdir(), 'plint-rule-'))
+export async function runAgentic(rule: AgenticRule, file: PromptFile, root: string, changed: readonly number[] | undefined, deadline: AbortSignal): Promise<readonly Finding[]> {
+  const plugin = mkdtempSync(join(tmpdir(), 'rulebook-rule-'))
   try {
     mkdirSync(join(plugin, '.claude-plugin'))
-    writeFileSync(join(plugin, '.claude-plugin', 'plugin.json'), JSON.stringify({ name: PLUGIN, version: '0.0.0', description: `Runs ${rule.id} for plint.` }))
+    writeFileSync(join(plugin, '.claude-plugin', 'plugin.json'), JSON.stringify({ name: PLUGIN, version: '0.0.0', description: `Runs ${rule.id} for rulebook.` }))
     mkdirSync(join(plugin, 'skills', SKILL), { recursive: true })
     writeFileSync(join(plugin, 'skills', SKILL, 'SKILL.md'), ruleSkill(rule, file, changed))
-    return await runSession(plugin, root, timeoutMs)
+    return await runSession(plugin, root, deadline)
   } finally {
     rmSync(plugin, { recursive: true, force: true })
   }
 }
 
-async function runSession(plugin: string, root: string, timeoutMs: number): Promise<readonly Finding[]> {
+async function runSession(plugin: string, root: string, deadline: AbortSignal): Promise<readonly Finding[]> {
+  deadline.throwIfAborted()
   const child = Bun.spawn([claudeProgram(), ...sessionArguments(plugin)], {
     cwd: root,
+    env: process.env,
     stdin: new Blob([`/${PLUGIN}:${SKILL}`]),
     stdout: 'pipe',
     stderr: 'pipe',
+    signal: deadline,
   })
-  let timer: Timer | undefined
-  const timedOut = new Promise<never>((_, reject) => {
-    timer = setTimeout(() => {
-      child.kill()
-      reject(new Error(`it ran past ${timeoutMs < 1000 ? `${timeoutMs} ms` : `${timeoutMs / 1000} s`}`))
-    }, timeoutMs)
-  })
+  const passed = new Promise<never>((_, reject) => deadline.addEventListener('abort', () => reject(deadline.reason), { once: true }))
   const finished = Promise.all([new Response(child.stdout).text(), new Response(child.stderr).text(), child.exited])
-  const [stdout, stderr, exitCode] = await Promise.race([finished, timedOut]).finally(() => clearTimeout(timer))
+  const [stdout, stderr, exitCode] = await Promise.race([finished, passed])
   if (exitCode !== 0 && stdout.trim() === '') throw new Error(`claude exited ${exitCode}: ${lastLine(stderr)}`)
   return findingsOf(stdout)
 }
 
-export function findingsOf(stdout: string): readonly Finding[] {
+function findingsOf(stdout: string): readonly Finding[] {
   const events: unknown[] = stdout.trim().split('\n').map((line) => JSON.parse(line))
   const answer = events.at(-1)
   if (!isRecord(answer) || answer.type !== 'result') throw new Error('claude answered no result event')
