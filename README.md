@@ -26,7 +26,7 @@ A config pulls in other configs only through `extends`: a list of config paths, 
 
 rulebook turns on no rule by itself. `recommended`, which `@cmodjs/rulebook` exports, turns on `rulebook/imports`, which flags a Claude.md import that names no file, the way ESLint's `js.configs.recommended` turns on its rules. `rulebook/no-suppressions`, which flags a comment that suppresses a linter's rule, stays off until a config sets its level. rulebook always registers the `@reply` message and checks every `rulebook-expect` pin as `rulebook/pins`.
 
-rulebook reads no config from the Claude Code plugins that are turned on. A plugin's rules and messages reach a project only when a config extends the plugin's `rulebook.config.ts`.
+rulebook reads no config from the Claude Code plugins that are turned on. A plugin's rules, and the tool calls and folders its `messages` name, reach a project only when a config extends the plugin's `rulebook.config.ts`.
 
 ```ts
 import { defineConfig, recommended } from '@cmodjs/rulebook'
@@ -57,13 +57,13 @@ export default defineConfig({
 | `existingErrors` | `warning`, the default, lets an edit through an error that was already in the file. `error` blocks it too. Either way, an edit's answer lists only the findings on lines the edit wrote, and counts the rest in one line that names the `rulebook <file>` command that lists them. An edit that adds and removes more than 1,000 lines in all counts every line as written, because finding the lines it wrote took 18 s for a rewrite of a 10,000-line file. |
 | `rules` | A level, `"off"`, or the settings of any rule: `level`, `runs`, `paths`, and for an agentic rule `timeout`, `agent`, `model`, `effort`. |
 | `linters` | The linters to run on every write, such as `['mago', 'oxlint']`. A linter no config lists never runs. |
-| `messages` | Each message an agent writes, by the name rules cover it with. `tools` registers `@<name>`, the text of each matching tool call, such as `['mcp__inbox__*']`. `folder` registers `@<name>/<path>` for each file under that folder, relative to the config. |
+| `messages` | Where rulebook finds a message by itself. `tools` checks each matching tool call, such as `['mcp__inbox__*']`, as `@<name>` before it runs. `folder` makes a full run check each file under that folder, relative to the config, as `@<name>/<path>`. A rule covers any `@` name without it. |
 
 ## Write a rule
 
 A rule is one file in a rule folder, at any depth. Its path in the folder is its name: `rules/writing/block-em-dashes.ts` in the `global` folder is `global/writing/block-em-dashes`, so moving a rule renames it. Every rule has a `description`, the Rule in one line of plain words, and rulebook refuses to load a rule without one.
 
-A rule's `paths` decide what it checks. A path is a glob for any file, or a message named with `@`. A file glob is relative to the folder of the config that declares it: the config whose `plugins` names the rule's folder, or the config whose `rules` setting gives the rule new `paths`. The global config's rule paths, and those of a config outside the project, are relative to the project root. `@reply` is the agent's final reply, and a config's `messages` register more, such as `@inbox/**`. A rule path that names a message no config registers fails to load and names it. A glob that starts with `@` matches only a message, and any other glob only a file, so `**` covers every file and no message. A rule without `paths` checks every Prompt.
+A rule's `paths` decide what it checks. A path is a glob for any file, or a message named with `@`. A file glob is relative to the folder of the config that declares it: the config whose `plugins` names the rule's folder, or the config whose `rules` setting gives the rule new `paths`. The global config's rule paths, and those of a config outside the project, are relative to the project root. `@reply` is the agent's final reply. Any other `@` path covers the message a mod checks by that name, such as `@inbox/**` for each item the inbox checks with `rulebook text @inbox/<id>.md`, so a rule covers a mod's messages without any config naming the mod. A glob that starts with `@` matches only a message, and any other glob only a file, so `**` covers every file and no message. A rule without `paths` checks every Prompt.
 
 ```ts
 paths: ['**', '@reply', '@inbox', '@inbox/**']

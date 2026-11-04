@@ -2,7 +2,7 @@ import { existsSync, mkdirSync, renameSync } from 'node:fs'
 import { basename, join } from 'node:path'
 import type { NapiConfig } from '@ast-grep/napi'
 import type { Finding, Level, PromptFile, Rule, RuleSettings, Runs } from './api.ts'
-import { globRegExp, importsRule, noSuppressionsRule } from './check.ts'
+import { importsRule, noSuppressionsRule } from './check.ts'
 import type { Import } from './claude-md.ts'
 import { isLevel, isRecord, isRuns, isStrings, isTimeout, rootRelative, type Settings } from './config.ts'
 import { cacheFolder } from './linters.ts'
@@ -72,13 +72,7 @@ async function rulesOf(settings: Settings): Promise<readonly LoadedRule[]> {
     ids.add(id)
   }
   for (const id of Object.keys(settings.rules)) if (!ids.has(id)) throw new Error(`A rulebook config sets the rule "${id}", which no plugin holds. The rules are ${[...ids].join(', ')}.`)
-  const loaded = rules.map((rule) => overridden(rule, settings.rules[rule.id]))
-  const messages = Object.keys(settings.messages).map((name) => `@${name}`)
-  for (const { id, paths = [] } of loaded) {
-    const unregistered = paths.find((path) => path.startsWith('@') && !messages.some((name) => globRegExp(path.split('/')[0] ?? path).test(name)))
-    if (unregistered !== undefined) throw new Error(`${id} covers ${unregistered}, which names no message a config registers. The messages are ${messages.join(', ')}.`)
-  }
-  return loaded
+  return rules.map((rule) => overridden(rule, settings.rules[rule.id]))
 }
 
 function loadedRule(id: string, source: string, timeout: number): Promise<LoadedRule> {

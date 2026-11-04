@@ -50,12 +50,7 @@ export function answer(question: Question, input: unknown, root: string): Promis
 
 async function checkText({ name, text, cwd }: Text, root: string): Promise<unknown> {
   const settings = await loadSettings(cwd, root)
-  const [message = '', ...path] = name.slice(1).split('/')
-  const source = Object.hasOwn(settings.messages, message) ? settings.messages[message] : undefined
-  if (!name.startsWith('@') || source === undefined || (path.length > 0 && source.folder === undefined)) {
-    const names = Object.entries(settings.messages).flatMap(([each, { folder }]) => (folder === undefined ? [`@${each}`] : [`@${each}`, `@${each}/<path>`]))
-    throw new Error(`rulebook text checks a message by its @-name: ${names.join(', ')}.`)
-  }
+  if (!name.startsWith('@')) throw new Error('rulebook text checks a message by its @-name, such as @reply or @inbox/<id>.md.')
   const report = await checkFile(settings, await loadRules(settings), name, text, { scope: 'edit', imported: async () => new Set() })
   return editAnswer(report)
 }

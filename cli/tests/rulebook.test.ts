@@ -615,29 +615,29 @@ test('rulebook text @reply checks a reply with each rule whose paths cover @repl
   })
 })
 
-test("a config's message folder registers @-names under it, which only a rule whose paths start with @ checks, and rulebook text refuses a name no config registers", () => {
-  const unregistered = rulebook(['text', '@inbox/proposal/x.md'], 'Run it — now.')
-  expect(unregistered.code).toBe(2)
-  expect(unregistered.stderr).toBe('rulebook: rulebook text checks a message by its @-name: @reply.\n')
+test('rulebook text checks any @-name with the rules whose paths cover it, with no config naming the message', () => {
+  const dash = String.fromCharCode(0x2014)
+  expect(JSON.parse(rulebook(['text', '@inbox/proposal/x.md'], `Run it ${dash} now.`).stdout)).toEqual({ failures: [], findings: [] })
 
-  write(join(project, 'rulebook.config.ts'), `export default { messages: { inbox: { folder: '../inbox-items' } }, rules: { 'global/block-em-dashes': { paths: ['@inbox/**'] }, 'global/block-hedging': { paths: ['**'] } } }\n`)
-  const run = rulebook(['text', '@inbox/proposal/x.md'], 'Run it — probably.')
+  write(join(project, 'rulebook.config.ts'), `export default { rules: { 'global/block-em-dashes': { paths: ['@inbox/**'] }, 'global/block-hedging': { paths: ['**'] } } }\n`)
+  const run = rulebook(['text', '@inbox/proposal/x.md'], `Run it ${dash} probably.`)
   expect(run.stderr).toBe('')
-  expect(JSON.parse(run.stdout).refuse).toBe(`Inbox refused. Fix every error, then send it again.\n\n  1  error  global/block-em-dashes  Split the sentence at the em dash.\n     > Run it ${String.fromCharCode(0x2014)} probably.`)
+  expect(JSON.parse(run.stdout).refuse).toBe(`Inbox refused. Fix every error, then send it again.\n\n  1  error  global/block-em-dashes  Split the sentence at the em dash.\n     > Run it ${dash} probably.`)
+
+  const file = rulebook(['text', 'notes.md'], 'Run it now.')
+  expect(file.code).toBe(2)
+  expect(file.stderr).toBe('rulebook: rulebook text checks a message by its @-name, such as @reply or @inbox/<id>.md.\n')
 })
 
-test('a turned-on plugin with a rulebook.config.ts adds nothing until a config extends it', () => {
-  const dash = String.fromCharCode(0x2014)
+test("a turned-on plugin's rulebook.config.ts registers no message until a config extends it", () => {
   write(join(home, '.claude', 'settings.json'), JSON.stringify({ enabledPlugins: { 'inbox@market': true } }))
   write(join(home, '.claude', 'plugins', 'installed_plugins.json'), JSON.stringify({ version: 2, plugins: { 'inbox@market': [{ scope: 'user', installPath: join(home, 'cache', 'inbox@market') }] } }))
   write(join(home, 'cache', 'inbox@market', 'rulebook.config.ts'), `export default { messages: { inbox: { tools: ['mcp__inbox__*'] } } }\n`)
-  write(join(project, 'rulebook.config.ts'), `export default { rules: { 'global/block-em-dashes': { paths: ['@inbox'] } } }\n`)
-  const unregistered = rulebook(['text', '@inbox'], `Run it ${dash} now.`)
-  expect(unregistered.code).toBe(2)
-  expect(unregistered.stderr).toBe('rulebook: rulebook text checks a message by its @-name: @reply.\n')
+  const messages = () => (JSON.parse(rulebook(['rules']).stdout) as { messages: { name: string }[] }).messages.map(({ name }) => name)
+  expect(messages()).toEqual(['@reply'])
 
-  write(join(project, 'rulebook.config.ts'), `export default { extends: ['~/cache/inbox@market/rulebook.config.ts'], rules: { 'global/block-em-dashes': { paths: ['@inbox'] } } }\n`)
-  expect(JSON.parse(rulebook(['text', '@inbox'], `Run it ${dash} now.`).stdout).refuse).toBe(`Inbox refused. Fix every error, then send it again.\n\n  1  error  global/block-em-dashes  Split the sentence at the em dash.\n     > Run it ${dash} now.`)
+  write(join(project, 'rulebook.config.ts'), `export default { extends: ['~/cache/inbox@market/rulebook.config.ts'] }\n`)
+  expect(messages()).toEqual(['@reply', '@inbox'])
 })
 
 test("CLAUDE_CONFIG_DIR moves Claude Code's config folder: a file in its rules/ reads as a user rules file", () => {
@@ -715,13 +715,6 @@ test('a later rules setting merges over an earlier one key by key, and a level w
   expect(levels("{ runs: 'manual' }", "'warning'")).toEqual([])
   expect(levels("'warning'", "{ paths: ['**/Claude.md'] }")).toEqual(['warning'])
   expect(levels("'off'", "{ paths: ['**/Claude.md'] }")).toEqual([])
-})
-
-test('a rule path that names a message no config registers fails loudly and names it', () => {
-  write(join(project, 'rulebook.config.ts'), `export default { rules: { 'global/block-em-dashes': { paths: ['**', '@inbox/**'] } } }\n`)
-  const run = rulebook(['--static'])
-  expect(run.code).toBe(2)
-  expect(run.stderr).toBe('rulebook: global/block-em-dashes covers @inbox/**, which names no message a config registers. The messages are @reply.\n')
 })
 
 test('a script rule with a key rulebook does not read fails to load and names the key', () => {

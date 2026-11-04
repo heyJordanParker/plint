@@ -13,7 +13,7 @@ rulebook checks every Prompt an Agent edits, and every other file or message a r
 - The nearest `rulebook.config.ts` in a file's folder or a folder above it holds the rules of that folder's files, so a nested package holds its own. Only that one config applies to the file, merged over the global config.
 - `extends` pulls in other configs: paths relative to the config, with `~` read as the home folder, and config objects such as `recommended` from `@cmodjs/rulebook`. The global config merges first, then each `extends` entry from left to right, then the config's own keys, so a later `rules` setting turns an inherited rule off or down.
 - rulebook turns on no rule by itself. `extends: [recommended]` turns on `rulebook/imports`. `rules: { 'rulebook/no-suppressions': 'error' }` turns on the rule that flags a comment that suppresses a linter's rule, such as `// oxlint-disable-next-line` or `# noqa`. A Claude Code plugin's rules apply only when a config extends the plugin's `rulebook.config.ts`.
-- `messages` names each message rules can cover besides `@reply`: `tools` registers `@<name>`, the text of each matching tool call, and `folder` registers `@<name>/<path>` for each file under that folder.
+- `messages` tells rulebook where to find a message by itself: `tools` checks each matching tool call as `@<name>`, and `folder` makes a full run check each file under that folder as `@<name>/<path>`. A rule covers any `@` name without it.
 - `plugins` names each rule folder. A rule is one file at any depth of that folder, and its name is `<plugin>/<path in the folder, without the extension>`: `rules/writing/block-em-dashes.ts` is `global/writing/block-em-dashes`.
 - `paths` lists the files that count as Prompts, relative to the config's folder, and `probes` the probe files. The global config's `paths` are relative to the project root.
 - `linters` lists the linters rulebook runs on every write, such as `['mago', 'oxlint']`, from `mago`, `oxlint`, `biome`, `stylelint`, `ruff`, `selene`, and `shellcheck`. A linter no config lists never runs.
@@ -46,8 +46,8 @@ IF the project's own linter can express the check:
 rulebook runs each linter a config's `linters` lists on every write with the project's config, and reports its findings as `<linter>/<rule>`, such as `mago/no-direct-db-query`. List the linter in the project's `rulebook.config.ts` when no config lists it yet. The linter's config stays the one place its rules live.
 
 ### Cover what the rule checks with `paths`
-A rule without `paths` checks every Prompt. `paths` takes globs for any file, relative to the folder of the config whose `plugins` names the rule's folder, or to the project root for the global config, and messages named with `@`: `@reply` is the main Agent's final reply, and a config's `messages` register more, such as `@inbox` and `@inbox/**`. A glob that starts with `@` matches only a message, so `**` covers every file and no message.
-Example: `paths: ['**', '@reply', '@inbox', '@inbox/**']`
+A rule without `paths` checks every Prompt. `paths` takes globs for any file, relative to the folder of the config whose `plugins` names the rule's folder, or to the project root for the global config, and messages named with `@`: `@reply` is the main Agent's final reply, and any other `@` path covers the message a mod checks by that name, such as `@inbox/**` for each inbox item. A glob that starts with `@` matches only a message, so `**` covers every file and no message.
+Example: `paths: ['**', '@reply', '@inbox/**']`
 
 ## 4. Write a pattern rule when the code's shape decides
 
