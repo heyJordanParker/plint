@@ -1,19 +1,53 @@
 # rulebook
 
-rulebook lints Claude Code Prompts: every Claude.md, rule, Skill, and agent file, and any other file or agent message a rule covers. When any agent edits a file, rulebook checks it as the edit will leave it. An error refuses the edit, and the agent reads why, with the line it wrote. A warning lets the edit land, and the agent reads it beside the result.
+rulebook lints Claude Code Prompts: every CLAUDE.md, rule, Skill, and agent file, and any other file or agent message a rule covers. When any agent writes a file with Edit, Write, or MultiEdit, rulebook checks it as the write will leave it. An error refuses the edit, and the agent reads why, with the line it wrote. A warning lets the edit land, and the agent reads it beside the result.
 
 rulebook checks what agents send you the same way. Before the main agent ends its turn, rulebook checks its final reply as `@reply`. An error keeps the agent from stopping once per turn, and the agent writes the whole reply again. A rewrite that still breaks a rule ends the turn, and its findings show as a warning toast. A subagent's answer is never checked. Before any agent calls a tool that a config's `messages` `tools` match, such as an inbox tool, rulebook checks the text of every field the call sends, and an error refuses the call before it runs.
 
 ```text
-Edit to packages/claude/rules/scope.md refused. Fix every error, then edit again.
+Edit to .claude/rules/testing.md refused. Fix every error, then edit again.
 
-  12  error  global/block-em-dashes  An em dash joins two ideas in one sentence. Split it into two sentences.
-      > Run the sync script — it restows every package.
+  12  error  global/block-em-dashes  Split the sentence at the em dash.
+      > Run the tests — they take a minute.
 ```
 
-rulebook is a [cmod](https://claudemodmanager.com) mod. Install it with `cmod install heyJordanParker/rulebook`, which also puts the `rulebook` program on your `PATH`.
+## Install
 
-A project with a `package.json` adds `@cmodjs/rulebook` as a dev dependency, for the types its rule files and config import and for `bun rulebook` in its scripts.
+rulebook is a mod for [Claude Mod Manager (cmod)](https://github.com/heyJordanParker/cmod), version 5.10.0 or later. With cmod installed, run:
+
+```sh
+cmod install heyJordanParker/rulebook
+```
+
+That installs the mod in Claude Code and puts the `rulebook` program on your `PATH`. The program runs on macOS and Linux (glibc), on arm64 and x64.
+
+A project with a `package.json` can add `@cmodjs/rulebook` as a dev dependency, for editor types in its rule files and config, and for `bun rulebook` in its scripts. Rules and configs run without it, because the program serves `@cmodjs/rulebook` to them itself.
+
+## Quick start
+
+rulebook turns on no rule until a config does. Write your global config at `~/.config/rulebook/rulebook.config.ts`:
+
+```ts
+import { defineConfig, recommended } from '@cmodjs/rulebook'
+
+export default defineConfig({
+  extends: [recommended],
+  plugins: { global: './rules' },
+})
+```
+
+`recommended` makes every CLAUDE.md, CLAUDE.local.md, AGENTS.md, and `.claude/` rule, agent, command, and Skill file a Prompt, and flags a CLAUDE.md import that names no file. `plugins` names `~/.config/rulebook/rules/` as the `global` rule folder. Add your first rule there as `~/.config/rulebook/rules/block-em-dashes.ts`:
+
+```ts
+import { defineRule } from '@cmodjs/rulebook'
+
+export default defineRule({
+  description: "Don't write em dashes.",
+  check: ({ lines }) => lines.flatMap((text, index) => (text.includes('—') ? [{ line: index + 1, message: 'Split the sentence at the em dash.' }] : [])),
+})
+```
+
+Start a Claude Code session. The agent reads "Don't write em dashes." beside each Prompt it opens, and a write that puts an em dash in a CLAUDE.md is refused. Run `rulebook` in a project to check every Prompt it holds, or `/rulebook` in a session to see the results in the Sidebar. The `/rulebook:write-rule` Skill walks an agent through writing more rules.
 
 ## Configure it
 
@@ -24,7 +58,7 @@ rulebook checks each file with two configs, the second merged over the first:
 
 A config pulls in other configs only through `extends`: a list of config paths, relative to the config, with `~` read as the home folder, and config objects imported from packages. A file gets the global config, then each `extends` entry from left to right, then the config's own keys. Lists add up, and a later `rules` setting merges over an earlier one key by key, as ESLint merges its rule settings, so a nearer config can turn any rule it inherits off or down. A level written as a string, such as `'warning'`, sets only `level`. A config reached twice merges once, at its first place. An `extends` path that names no file fails and names it.
 
-rulebook turns on no rule by itself. `recommended`, which `@cmodjs/rulebook` exports, turns on `rulebook/imports`, which flags a Claude.md import that names no file, the way ESLint's `js.configs.recommended` turns on its rules. `rulebook/no-suppressions`, which flags a comment that suppresses a linter's rule, stays off until a config sets its level. rulebook always registers the `@reply` message and checks every `rulebook-expect` pin as `rulebook/pins`.
+rulebook turns on no rule by itself. `recommended`, which `@cmodjs/rulebook` exports, makes the files Claude Code reads as instructions Prompts, `**/{CLAUDE,Claude}.md`, `**/{CLAUDE,Claude}.local.md`, `**/AGENTS.md`, and `**/.claude/{rules,agents,commands,skills}/**/*.md`, and turns on `rulebook/imports`, which flags a CLAUDE.md import that names no file, the way ESLint's `js.configs.recommended` turns on its rules. `rulebook/no-suppressions`, which flags a comment that suppresses a linter's rule, stays off until a config sets its level. rulebook always registers the `@reply` message and checks every `rulebook-expect` pin as `rulebook/pins`.
 
 rulebook reads no config from the Claude Code plugins that are turned on. A plugin's rules, and the tool calls and folders its `messages` name, reach a project only when a config extends the plugin's `rulebook.config.ts`.
 
@@ -33,24 +67,24 @@ import { defineConfig, recommended } from '@cmodjs/rulebook'
 
 export default defineConfig({
   extends: [recommended, '../rulebook.config.ts'],
-  plugins: { dent: './tools/rulebook/rules' },
-  paths: ['**/Claude.md', '.claude/**/*.md'],
+  plugins: { app: './tools/rulebook/rules' },
+  paths: ['docs/agents/**/*.md'],
   probes: ['tests/rulebook/**/*.md'],
   timeout: 30_000,
   existingErrors: 'warning',
   rules: {
-    'global/require-file-links': 'off',
-    'global/writing/block-domain-words-for-code': { level: 'warning', model: 'sonnet' },
-    'dent/require-module-owners': { runs: 'manual', timeout: 300_000 },
+    'global/block-em-dashes': 'off',
+    'global/writing/require-plain-words': { level: 'warning', model: 'sonnet' },
+    'app/require-module-owners': { runs: 'manual', timeout: 300_000 },
   },
-  linters: ['mago', 'oxlint'],
+  linters: ['oxlint', 'ruff'],
 })
 ```
 
 | Key | What it sets |
 | --- | --- |
 | `extends` | The configs this one builds on: paths relative to the config, and config objects such as `recommended`. |
-| `plugins` | Each rule folder, by the name its rules carry, such as `dent/require-module-owners`. |
+| `plugins` | Each rule folder, by the name its rules carry, such as `app/require-module-owners`. |
 | `paths` | The files that count as Prompts, relative to the config's folder. The global config's paths, and those of a config outside the project, are relative to the project root. Every file a Claude.md or `.claude/rules/` file among them imports, four hops deep, counts too. |
 | `probes` | The probe files, relative to the config. |
 | `timeout` | How long an agentic rule or a linter run may take, in milliseconds, unless the rule sets its own. 30 000 by default. |
@@ -61,7 +95,7 @@ export default defineConfig({
 
 ## Write a rule
 
-A rule is one file in a rule folder, at any depth. Its path in the folder is its name: `rules/writing/block-em-dashes.ts` in the `global` folder is `global/writing/block-em-dashes`, so moving a rule renames it. Every rule has a `description`, the Rule in one line of plain words, and rulebook refuses to load a rule without one.
+A rule is one file in a rule folder, at any depth. Its path in the folder is its name: with `plugins: { global: './rules' }`, `rules/writing/block-em-dashes.ts` is `global/writing/block-em-dashes`, so moving a rule renames it. Every rule has a `description`, the Rule in one line of plain words, and rulebook refuses to load a rule without one.
 
 A rule's `paths` decide what it checks. A path is a glob for any file, or a message named with `@`. A file glob is relative to the folder of the config that declares it: the config whose `plugins` names the rule's folder, or the config whose `rules` setting gives the rule new `paths`. The global config's rule paths, and those of a config outside the project, are relative to the project root. `@reply` is the agent's final reply. Any other `@` path covers the message a mod checks by that name, such as `@inbox/**` for each item the inbox checks with `rulebook text @inbox/<id>.md`, so a rule covers a mod's messages without any config naming the mod. A glob that starts with `@` matches only a message, and any other glob only a file, so `**` covers every file and no message. A rule without `paths` checks every Prompt.
 
@@ -100,7 +134,7 @@ description: Don't state a Fact the code contradicts.
 model: sonnet
 allowed-tools: Read, Grep, Glob
 paths:
-  - "**/Claude.md"
+  - "**/CLAUDE.md"
 metadata:
   level: error
   runs: manual
@@ -174,7 +208,7 @@ Every agent reads each rule's description before it can break it. A rule whose `
 A rule for some files, and a rule with no `paths`, which covers every Prompt, reaches the agent with its first read or write of a file it covers:
 
 ```text
-Rules for packages/claude/Claude.md:
+Rules for docs/CLAUDE.md:
 - Don't state a Fact the code contradicts.
 ```
 
@@ -186,9 +220,9 @@ A probe holds lines the rule must flag, each under a pin, and lines it must leav
 
 ```md
 <!-- rulebook-expect global/block-em-dashes -->
-Run the sync script — it restows every package.
+Run the tests — they take a minute.
 
-Run the sync script. It restows every package.
+Run the tests. They take a minute.
 ```
 
 ## Run it
@@ -228,4 +262,10 @@ These are the medians of 20 checks, a fresh `rulebook edit` process against the 
 | An edit to an existing file, 485-file repository | 52.9 ms | 0.6 ms |
 | An edit to an existing file, 29,618-file repository | 628.3 ms | 0.5 ms |
 
-Biome, oxlint, Mago, ruff, selene, shellcheck, and each agentic rule's Claude Code session still start per write, because none of them lints pending text in process with the findings its own command line gives. A server that is down fails each check with an error toast. The `rulebook` command keeps working on its own, for full runs and CI.
+Biome, oxlint, Mago, ruff, selene, shellcheck, and each agentic rule's Claude Code session still start per write, because none of them lints pending text in process with the findings its own command line gives. A server that is down, or a config that fails to load, fails each check with an error toast and lets the write through, so a broken setup never blocks an agent's work. A rule file that fails to load is skipped, every other rule keeps checking, and its failure shows once as a warning. The `rulebook` command keeps working on its own, for full runs and CI.
+
+## What runs and what leaves your machine
+
+A config and a `.ts` rule are code, and rulebook runs them, the way ESLint runs its configs. A session in a project loads that project's `rulebook.config.ts` files and their rules, so open a cloned repository only when you trust its configs.
+
+rulebook sends nothing anywhere by itself. The mod talks to `rulebook serve` over a Unix socket on your computer, and the program starts only `git`, the linters your configs list, and `claude`. An agentic rule is the one exception: it runs `claude -p` with your own Claude Code account, and that session reads the checked file and sends it to Anthropic, as any Claude Code session does.

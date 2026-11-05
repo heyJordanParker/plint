@@ -14,7 +14,7 @@ rulebook checks every Prompt an Agent edits, and every other file or message a r
 - `extends` pulls in other configs: paths relative to the config, with `~` read as the home folder, and config objects such as `recommended` from `@cmodjs/rulebook`. The global config merges first, then each `extends` entry from left to right, then the config's own keys, so a later `rules` setting turns an inherited rule off or down.
 - rulebook turns on no rule by itself. `extends: [recommended]` turns on `rulebook/imports`. `rules: { 'rulebook/no-suppressions': 'error' }` turns on the rule that flags a comment that suppresses a linter's rule, such as `// oxlint-disable-next-line` or `# noqa`. A Claude Code plugin's rules apply only when a config extends the plugin's `rulebook.config.ts`.
 - `messages` tells rulebook where to find a message by itself: `tools` checks each matching tool call as `@<name>`, and `folder` makes a full run check each file under that folder as `@<name>/<path>`. A rule covers any `@` name without it.
-- `plugins` names each rule folder. A rule is one file at any depth of that folder, and its name is `<plugin>/<path in the folder, without the extension>`: `rules/writing/block-em-dashes.ts` is `global/writing/block-em-dashes`.
+- `plugins` names each rule folder. A rule is one file at any depth of that folder, and its name is `<plugin>/<path in the folder, without the extension>`: with `plugins: { global: './rules' }`, `rules/writing/block-em-dashes.ts` is `global/writing/block-em-dashes`.
 - `paths` lists the files that count as Prompts, relative to the config's folder, and `probes` the probe files. The global config's `paths` are relative to the project root.
 - `linters` lists the linters rulebook runs on every write, such as `['mago', 'oxlint']`, from `mago`, `oxlint`, `biome`, `stylelint`, `ruff`, `selene`, and `shellcheck`. A linter no config lists never runs.
 
@@ -132,10 +132,10 @@ Measure one run on the largest Prompt it covers, and set `timeout` well past tha
 A probe is a file the config's `probes` names, such as `probes/<name>.md`. Put each line the rule must flag under a pin, and add lines it must leave alone. A pattern rule's probe is a file in its language, such as `probes/block-console-log.ts`, and its pins are the same HTML comments.
 
 ```md
-<!-- rulebook-expect global/block-em-dashes -->
-Run the sync script — it restows every package.
+<!-- rulebook-expect global/block-hedging -->
+The tests probably pass.
 
-Run the sync script. It restows every package.
+The tests pass.
 ```
 
 A probe runs only the rules it pins. A pin works only in a probe file.

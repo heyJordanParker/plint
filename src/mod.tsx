@@ -42,6 +42,13 @@ export const rulebook = defineMod({
     const everyAgent = sessions.current.goal
     const server = mod.use(program({ command: ['rulebook', 'serve'], singleInstance: true }))
 
+    const warned = new Set<string>()
+    const warn = (text: string): void => {
+      if (warned.has(text)) return
+      warned.add(text)
+      mod.toast.warning(text)
+    }
+
     let environment: Promise<string> | undefined
     const asked = async <Answer,>(question: string, input: object, signal?: AbortSignal): Promise<Answer> => {
       environment ??= environmentOf().catch((error: unknown) => {
@@ -76,7 +83,7 @@ export const rulebook = defineMod({
       listing = loading
       void loading.then((loaded) => {
         sources = loaded.sources
-        for (const failure of loaded.failures) mod.toast.warning(failure)
+        for (const failure of loaded.failures) warn(failure)
       }, () => {
         if (listing === loading) listing = undefined
       }).then(watch)
@@ -85,7 +92,7 @@ export const rulebook = defineMod({
     const listed = (): Promise<Listed> => (listing !== undefined && project === sessions.current.project ? listing : load())
 
     const relayed = (answer: EditAnswer): { readonly refuse: string } | { readonly note: string } | undefined => {
-      for (const failure of answer.failures) mod.toast.warning(failure)
+      for (const failure of answer.failures) warn(failure)
       if (answer.refuse !== undefined) return { refuse: answer.refuse }
       if (answer.note !== undefined) return { note: answer.note }
       return undefined
