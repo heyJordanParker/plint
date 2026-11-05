@@ -11,17 +11,20 @@ export const resultsPage: PageInit<RulebookState> = {
     if (run.status === 'idle') return <Text dimColor>Run /rulebook to check every Prompt in this project.</Text>
     if (run.status === 'running') return <Text dimColor>{run.files.length === 0 ? 'Checking every Prompt in this project with every rule…' : `Checking ${run.files.join(', ')} with every rule…`}</Text>
     if (run.status === 'failed') return <Text>{`rulebook failed: ${run.error}`}</Text>
-    return <Results reports={run.reports} />
+    return <Results reports={run.reports} failures={run.failures} />
   },
 }
 
-function Results({ reports }: { readonly reports: readonly Report[] }): RenderElement {
+function Results({ reports, failures }: { readonly reports: readonly Report[]; readonly failures: readonly string[] }): RenderElement {
   const findings = reports.flatMap((report) => report.findings)
   const errors = findings.filter(({ level }) => level === 'error').length
   const flagged = reports.filter((report) => report.findings.length > 0 || report.failures.length > 0)
   return (
     <Box flexDirection="column" gap={1}>
       <Text bold>{`${errors} ${errors === 1 ? 'error' : 'errors'}, ${findings.length - errors} ${findings.length - errors === 1 ? 'warning' : 'warnings'} in ${reports.length} ${reports.length === 1 ? 'file' : 'files'}`}</Text>
+      {failures.map((failure) => (
+        <Text key={failure} wrap="wrap">{failure}</Text>
+      ))}
       {flagged.map((report) => (
         <Box key={report.path} flexDirection="column">
           <Text bold>{report.path}</Text>

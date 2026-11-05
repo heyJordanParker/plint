@@ -14,7 +14,7 @@ export type Report = {
 type Run =
   | { readonly status: 'idle' }
   | { readonly status: 'running'; readonly files: readonly string[] }
-  | { readonly status: 'done'; readonly reports: readonly Report[] }
+  | { readonly status: 'done'; readonly reports: readonly Report[]; readonly failures: readonly string[] }
   | { readonly status: 'failed'; readonly error: string }
 
 export type RulebookState = { memory: { run: Run; shown: Readonly<Record<string, readonly string[]>>; refusedTurn: string | undefined } }

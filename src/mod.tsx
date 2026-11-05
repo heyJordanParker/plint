@@ -22,6 +22,7 @@ type Listing = {
     readonly rules: readonly { readonly id: string; readonly description: string; readonly isEverywhere: boolean; readonly paths: readonly ListedRegExp[] }[]
   }[]
   readonly messages: readonly { readonly name: string; readonly tools: readonly ListedRegExp[] }[]
+  readonly failures: readonly string[]
 }
 
 type ListedRule = Listing['folders'][number]['rules'][number] & { readonly covers: (path: string) => boolean }
@@ -75,6 +76,7 @@ export const rulebook = defineMod({
       listing = loading
       void loading.then((loaded) => {
         sources = loaded.sources
+        for (const failure of loaded.failures) mod.toast.warning(failure)
       }, () => {
         if (listing === loading) listing = undefined
       }).then(watch)
@@ -163,8 +165,8 @@ async function checkProject(mod: Mod<RulebookState>, files: readonly string[]): 
   try {
     const checked = await process.run(['rulebook', '--json', ...files], { cwd: sessions.current.cwd, timeoutMs: longestMs })
     if (checked.exitCode > 1) throw new Error(checked.stderr.trim())
-    const { reports } = JSON.parse(checked.stdout) as { readonly reports: readonly Report[] }
-    mod.state.memory.run = { status: 'done', reports }
+    const { reports, failures } = JSON.parse(checked.stdout) as { readonly reports: readonly Report[]; readonly failures: readonly string[] }
+    mod.state.memory.run = { status: 'done', reports, failures }
   } catch (error) {
     mod.state.memory.run = { status: 'failed', error: messageOf(error) }
   }
@@ -176,10 +178,11 @@ async function environmentOf(): Promise<string> {
   return JSON.stringify(Object.fromEntries(printed.stdout.split('\0').filter((line) => line.includes('=')).map((line) => [line.slice(0, line.indexOf('=')), line.slice(line.indexOf('=') + 1)])))
 }
 
-function listedOf({ root, sources, folders, messages }: Listing): Listed {
+function listedOf({ root, sources, folders, messages, failures }: Listing): Listed {
   return {
     root,
     sources,
+    failures,
     folders: [...folders].sort((a, b) => b.path.length - a.path.length).map(({ path, rules }) => ({ path, rules: rules.map((rule) => ({ ...rule, covers: anyOf(rule.paths) })) })),
     messages: messages.map((message) => ({ ...message, isSentBy: anyOf(message.tools) })),
   }

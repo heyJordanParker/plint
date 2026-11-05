@@ -2,6 +2,12 @@
 
 What changed in each version of rulebook, for the people who use it. cmod publish releases the section for the version, and Settings shows it.
 
+## [0.2.1]
+
+### Changed
+- A rule file that fails to load, such as one without a `description`, checks nothing, and every other rule keeps checking. Each session shows its failure once, as a warning, and a full `rulebook` run lists it and exits 1. Before, one broken rule failed every check in every session that loaded it.
+- The mod bundles `@cmodjs/core` 5.11.0.
+
 ## [0.2.0]
 
 ### Changed
