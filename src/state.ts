@@ -11,12 +11,12 @@ export type Report = {
   readonly failures: readonly { readonly rule: string; readonly reason: string }[]
 }
 
-export type Run =
+type Run =
   | { readonly status: 'idle' }
   | { readonly status: 'running'; readonly files: readonly string[] }
   | { readonly status: 'done'; readonly reports: readonly Report[] }
   | { readonly status: 'failed'; readonly error: string }
 
-export type PlintState = { memory: { run: Run } }
+export type RulebookState = { memory: { run: Run; shown: Readonly<Record<string, readonly string[]>>; refusedTurn: string | undefined } }
 
-export const initialState: PlintState = { memory: { run: { status: 'idle' } } }
+export const initialState: RulebookState = { memory: { run: { status: 'idle' }, shown: {}, refusedTurn: undefined } }
