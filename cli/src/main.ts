@@ -8,7 +8,7 @@ import { loadSettings, projectRoot, type Settings } from './config.ts'
 import { filesBySettings, importedFiles, listedFiles, probeFiles, projectFiles } from './files.ts'
 import { answer, projectOf, type Question } from './questions.ts'
 import { textReport } from './report.ts'
-import { loadRules } from './rules.ts'
+import { loadRules, type LoadedRule } from './rules.ts'
 import { serve } from './serve.ts'
 
 const HELP = `rulebook ${packageJson.version}: lints Claude Code Prompts against static and agentic rules.
@@ -49,21 +49,28 @@ async function check(named: readonly string[], isStatic: boolean, isJson: boolea
   const settings = await loadSettings(process.cwd(), root)
   const groups = new Map<Settings, readonly string[]>([[settings, []], ...(await filesBySettings(root, projectFiles(settings, await listing)))])
   const imported = importedFiles(root, groups)
-  const files = named.length > 0 ? named.map((file) => realFile(file)) : await textFiles([...new Set([...(await coveredFiles(groups)), ...imported, ...messageFiles(settings)])])
+  const unloaded = new Set<string>()
+  const rulesOf = async (own: Settings): Promise<readonly LoadedRule[]> => {
+    const { rules, failures } = await loadRules(own)
+    for (const failure of failures) unloaded.add(failure)
+    return rules
+  }
+  const files = named.length > 0 ? named.map((file) => realFile(file)) : await textFiles([...new Set([...(await coveredFiles(groups, rulesOf)), ...imported, ...messageFiles(settings)])])
   const checked = await Promise.all(files.map(async (file) => {
     const own = displayPath(settings, file).startsWith('@') ? settings : await loadSettings(dirname(file), root)
-    const report = await checkFile(own, await loadRules(own), file, await Bun.file(file).text(), { scope: isStatic ? 'static' : 'all', imported: async () => imported })
+    const report = await checkFile(own, await rulesOf(own), file, await Bun.file(file).text(), { scope: isStatic ? 'static' : 'all', imported: async () => imported })
     if (report === undefined && named.length > 0) throw new Error(`${file} is not a Prompt, a probe, or a file a rule's paths cover.`)
     return report
   }))
   const reports = await lintProject(groups, checked.filter((report) => report !== undefined), named.length > 0 ? files : undefined)
-  await print(isJson ? JSON.stringify({ reports }) : textReport(reports))
-  return reports.some(({ findings, failures }) => failures.length > 0 || findings.some(({ level }) => level === 'error')) ? 1 : 0
+  const failures = [...unloaded]
+  await print(isJson ? JSON.stringify({ reports, failures }) : textReport(reports, failures))
+  return failures.length > 0 || reports.some((report) => report.failures.length > 0 || report.findings.some(({ level }) => level === 'error')) ? 1 : 0
 }
 
-async function coveredFiles(groups: ReadonlyMap<Settings, readonly string[]>): Promise<readonly string[]> {
+async function coveredFiles(groups: ReadonlyMap<Settings, readonly string[]>, rulesOf: (settings: Settings) => Promise<readonly LoadedRule[]>): Promise<readonly string[]> {
   const covered = await Promise.all([...groups].map(async ([settings, files]) => {
-    const rules = await loadRules(settings)
+    const rules = await rulesOf(settings)
     return [...files.filter((file) => isPrompt(settings, file) || isCovered(settings, rules, file)), ...probeFiles(settings)]
   }))
   return covered.flat()

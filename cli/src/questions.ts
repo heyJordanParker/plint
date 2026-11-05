@@ -51,7 +51,8 @@ export function answer(question: Question, input: unknown, root: string): Promis
 async function checkText({ name, text, cwd }: Text, root: string): Promise<unknown> {
   const settings = await loadSettings(cwd, root)
   if (!name.startsWith('@')) throw new Error('rulebook text checks a message by its @-name, such as @reply or @inbox/<id>.md.')
-  const report = await checkFile(settings, await loadRules(settings), name, text, { scope: 'edit', imported: async () => new Set() })
+  const { rules } = await loadRules(settings)
+  const report = await checkFile(settings, rules, name, text, { scope: 'edit', imported: async () => new Set() })
   return editAnswer(report)
 }
 
@@ -61,7 +62,7 @@ async function listRules(cwd: string, root: string): Promise<unknown> {
   const configured = ((await listedFiles(cwd)) ?? []).filter((path) => basename(path) === CONFIG_FILE && path !== CONFIG_FILE).map(dirname)
   const folders = await Promise.all(['', ...configured].map(async (path) => {
     const own = await loadSettings(join(root, path), root)
-    return { path, settings: own, rules: await loadRules(own) }
+    return { path, settings: own, ...(await loadRules(own)) }
   }))
   const regExpsOf = (globs: readonly string[]) => globs.map(globRegExp).map(({ source, flags }) => ({ source, flags }))
   return {
@@ -77,6 +78,7 @@ async function listRules(cwd: string, root: string): Promise<unknown> {
       })),
     })),
     messages: Object.entries(settings.messages).map(([name, { tools }]) => ({ name: `@${name}`, tools: regExpsOf(tools) })),
+    failures: [...new Set(folders.flatMap((folder) => folder.failures))],
   }
 }
 

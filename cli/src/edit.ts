@@ -30,7 +30,7 @@ export async function checkEdit(call: ToolCall, root: string): Promise<EditAnswe
   if (next === undefined) return editAnswer(undefined)
   if (isClaudeMd(file)) watchImportSource(file)
   const settings = await loadSettings(dirname(file), root)
-  const rules = await loadRules(settings)
+  const { rules } = await loadRules(settings)
   const report = await checkFile(settings, rules, file, next, { scope: 'edit', previous: previous ?? '', imported: () => loadImportedFiles(root) })
   return editAnswer(report)
 }

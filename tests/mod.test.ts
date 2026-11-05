@@ -19,7 +19,7 @@ const LISTED = {
 const EM_DASHES = { id: 'global/block-em-dashes', description: "Don't write em dashes.", isEverywhere: true, paths: [LISTED['**'], LISTED['@reply']] }
 const TRUE_FACTS = { id: 'global/require-true-facts', description: "Don't state a Fact the code contradicts.", isEverywhere: false, paths: [LISTED['**/Claude.md']] }
 const MESSAGES = [{ name: '@reply', tools: [] }, { name: '@inbox', tools: [LISTED['mcp__inbox__*']] }]
-const LISTING = { root: '/work', sources: ['/home/.config/rulebook/rulebook.config.ts', '/work/rulebook.config.ts', '/home/.config/rulebook/rules'], folders: [{ path: '', rules: [EM_DASHES, TRUE_FACTS] }], messages: MESSAGES }
+const LISTING = { root: '/work', sources: ['/home/.config/rulebook/rulebook.config.ts', '/work/rulebook.config.ts', '/home/.config/rulebook/rules'], folders: [{ path: '', rules: [EM_DASHES, TRUE_FACTS] }], messages: MESSAGES, failures: [] as string[] }
 const FILES = { '/work/Claude.md': 'A fact.\n', '/work/packages/claude/Claude.md': 'A fact.\n', '/work/notes.md': 'A note.\n' }
 const SPLIT = { rule: 'global/block-em-dashes', line: 1, level: 'error', message: 'Split the sentence at the em dash.' }
 const ENVIRONMENT = { CLAUDE_CONFIG_DIR: '/home/.claude/profiles/copywriter', PATH: '/usr/bin:/bin' }
@@ -89,7 +89,7 @@ test('the mod runs one rulebook serve for the whole computer, and starts no rule
   tested.fakes.process.spawn = (request) => (spawned.push(request.argv), spawn(request))
   await tested.raise.beforeSessionStart({ source: 'startup' })
   await tested.raise.beforeToolCall({ name: 'Write', input: { file_path: '/work/Claude.md', content: 'x' } })
-  expect(spawned).toEqual([['/test/home/.local/share/cmod/programs/cmod', 'program', 'rulebook', '--', 'rulebook', 'serve']])
+  expect(spawned).toEqual([['/test/home/.local/share/cmod/programs/cmod', 'program', 'rulebook', '--no-wait', '--', 'rulebook', 'serve']])
   expect(tested.calls.filter(({ call }) => call === 'process.run').map(({ args }) => args[0])).toEqual([['env', '-0']])
 })
 
@@ -219,10 +219,22 @@ test('/rulebook lists every finding in the Sidebar', async () => {
   const tested = testMod(rulebook)
   served(tested, () => ({}))
   const reports = [{ path: 'Claude.md', findings: [{ rule: 'global/block-em-dashes', line: 3, level: 'error', message: 'Split the sentence at the em dash.', isExisting: false }], failures: [] }]
-  tested.fakes.process.run = async () => printed(JSON.stringify({ reports }), 1)
+  const failure = '/work/rules/block-x.ts: a rule needs a description.'
+  tested.fakes.process.run = async () => printed(JSON.stringify({ reports, failures: [failure] }), 1)
   await tested.type('/rulebook')
   await Bun.sleep(10)
-  expect(await tested.shown.page.lines()).toEqual(['1 error, 0 warnings in 1 file', '', 'Claude.md', '  3  error  global/block-em-dashes  Split the sentence at the em dash.'])
+  expect(await tested.shown.page.lines()).toEqual(['1 error, 0 warnings in 1 file', '', failure, '', 'Claude.md', '  3  error  global/block-em-dashes  Split the sentence at the em dash.'])
+})
+
+test("a rule that failed to load shows one warning toast per rules listing, and no check repeats it", async () => {
+  const failure = '/work/rules/block-x.ts: a rule needs a description. The rule dent/block-x checks nothing until it loads.'
+  const tested = serving({ rules: { ...LISTING, failures: [failure] }, edit: { failures: [], findings: [] } }, { projectRoot: '/work', files: FILES })
+  expect(await tested.raise.beforeSessionStart({ source: 'startup' })).toEqual({ note: "- Don't write em dashes." })
+  await tested.add({ type: Prompt, text: 'Edit the docs' })
+  expect(await read(tested, '/work/Claude.md')).toEqual({ note: "Rules for Claude.md:\n- Don't state a Fact the code contradicts." })
+  expect(await tested.raise.beforeToolCall({ name: 'Write', input: { file_path: '/work/Claude.md', content: 'x' } })).toBeUndefined()
+  await tested.settle()
+  expect(tested.shown.toasts.filter(({ type }) => type !== 'success').map(({ type, message }) => ({ type, message }))).toEqual([{ type: 'warning', message: failure }])
 })
 
 test('a rules listing that failed loads again on the next check, so the message checks go on once rulebook serve answers', async () => {

@@ -60,11 +60,11 @@ function subject(path: string): string {
   return `${name.charAt(0).toUpperCase()}${name.slice(1)}`
 }
 
-export function textReport(reports: readonly FileReport[]): string {
+export function textReport(reports: readonly FileReport[], unloaded: readonly string[]): string {
   const flagged = reports.filter(({ findings }) => findings.length > 0)
   const all = reports.flatMap(({ findings }) => findings)
   const errors = all.filter(({ level }) => level === 'error').length
-  const failures = reports.flatMap(failureLines)
+  const failures = [...unloaded, ...reports.flatMap(failureLines)]
   const blocks = flagged.map((report) => `${report.path}\n${findingLines(report.findings)}`)
   const counts = `${errors} ${errors === 1 ? 'error' : 'errors'}, ${all.length - errors} ${all.length - errors === 1 ? 'warning' : 'warnings'} in ${reports.length} ${reports.length === 1 ? 'file' : 'files'}`
   return [...blocks, ...(failures.length === 0 ? [] : [failures.join('\n')]), counts].join('\n\n')

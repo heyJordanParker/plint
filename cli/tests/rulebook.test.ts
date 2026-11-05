@@ -368,20 +368,37 @@ test('a rule in a subfolder carries the folder in its name, and a config or pin 
   expect(run.stderr).toContain('A rulebook config sets the rule "global/block-x", which no plugin holds. The rules are rulebook/imports, rulebook/no-suppressions, global/block-em-dashes, global/block-hedging, global/writing/block-x.')
 })
 
-test('a rule of any kind without a description fails to load and says so', () => {
+test('a rule of any kind without a description checks nothing, every other rule still checks, and the rules listing and a full run name it once', () => {
+  const dash = String.fromCharCode(0x2014)
   const rules = join(home, 'config', 'rulebook', 'rules')
   const undescribed = {
     'block-x.ts': `export default { check: () => [] }\n`,
     'block-y.md': '---\nmodel: haiku\n---\n\nReport each y.\n',
     'block-z.yml': 'language: typescript\nrule:\n  pattern: z\n',
   }
+  write(join(project, 'Claude.md'), `Run it ${dash} now.\n`)
   for (const [name, text] of Object.entries(undescribed)) {
     const rule = write(join(rules, name), text)
-    const run = rulebook(['--static'])
-    expect(run.code).toBe(2)
-    expect(run.stderr).toBe(`rulebook: ${rule}: a rule needs a description: the Rule in one line of plain words, such as "Don't write em dashes."\n`)
+    const failure = `${rule}: a rule needs a description: the Rule in one line of plain words, such as "Don't write em dashes." The rule global/${name.slice(0, name.lastIndexOf('.'))} checks nothing until it loads.`
+    expect(rulebook(['--static'])).toEqual({ code: 1, stdout: `Claude.md\n  1  error  global/block-em-dashes  Split the sentence at the em dash.\n     > Run it ${dash} now.\n\n${failure}\n\n1 error, 0 warnings in 1 file\n`, stderr: '' })
+    expect((JSON.parse(rulebook(['rules']).stdout) as { failures: string[] }).failures).toEqual([failure])
+    expect(edit('Write', { file_path: join(project, 'Claude.md'), content: `Run it ${dash} again.\n` })).toEqual({
+      refuse: `Edit to Claude.md refused. Fix every error, then edit again.\n\n  1  error  global/block-em-dashes  Split the sentence at the em dash.\n     > Run it ${dash} again.`,
+      failures: [],
+      findings: [{ rule: 'global/block-em-dashes', line: 1, level: 'error', message: 'Split the sentence at the em dash.', quote: `Run it ${dash} again.`, isExisting: false }],
+    })
     rmSync(rule)
   }
+})
+
+test("a project's rule that fails to load leaves the global rules checking that project, and a config setting for it is no error", () => {
+  const dash = String.fromCharCode(0x2014)
+  write(join(project, 'rulebook.config.ts'), `export default { plugins: { dent: './tools/rulebook/rules' }, rules: { 'dent/require-module-doc-shape': 'warning' } }\n`)
+  const rule = write(join(project, 'tools', 'rulebook', 'rules', 'require-module-doc-shape.ts'), `export default { check: () => [] }\n`)
+  const listing = rulebook(['rules'])
+  expect(listing.stderr).toBe('')
+  expect((JSON.parse(listing.stdout) as { failures: string[] }).failures).toEqual([`${rule}: a rule needs a description: the Rule in one line of plain words, such as "Don't write em dashes." The rule dent/require-module-doc-shape checks nothing until it loads.`])
+  expect(edit('Write', { file_path: join(project, 'Claude.md'), content: `Run it ${dash} now.\n` }).refuse).toBe(`Edit to Claude.md refused. Fix every error, then edit again.\n\n  1  error  global/block-em-dashes  Split the sentence at the em dash.\n     > Run it ${dash} now.`)
 })
 
 test('rulebook rules lists, for the project folder, each rule that is on with its id, description, whether it covers every file or a message, and a regular expression for each path it covers, each registered message with a regular expression for each tool that sends it, and the files and folders the rules come from', () => {
@@ -405,6 +422,7 @@ test('rulebook rules lists, for the project folder, each rule that is on with it
       { name: '@reply', tools: [] },
       { name: '@inbox', tools: [listed] },
     ],
+    failures: [],
   })
 })
 
@@ -719,7 +737,5 @@ test('a later rules setting merges over an earlier one key by key, and a level w
 
 test('a script rule with a key rulebook does not read fails to load and names the key', () => {
   const rule = write(join(home, 'config', 'rulebook', 'rules', 'block-x.ts'), `export default { description: "Don't write x.", levle: 'warning', check: () => [] }\n`)
-  const run = rulebook(['--static'])
-  expect(run.code).toBe(2)
-  expect(run.stderr).toBe(`rulebook: ${rule}: rulebook does not read the key "levle". It reads description, level, runs, paths, check.\n`)
+  expect(rulebook(['--static'])).toEqual({ code: 1, stdout: `${rule}: rulebook does not read the key "levle". It reads description, level, runs, paths, check. The rule global/block-x checks nothing until it loads.\n\n0 errors, 0 warnings in 0 files\n`, stderr: '' })
 })

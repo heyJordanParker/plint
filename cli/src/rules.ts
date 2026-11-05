@@ -37,6 +37,8 @@ export type AgenticRule = Common & {
 
 export type LoadedRule = StaticRule | AgenticRule
 
+export type Rules = { readonly rules: readonly LoadedRule[]; readonly failures: readonly string[] }
+
 const RULE_FILES = new Bun.Glob('**/*.{ts,md,yml}')
 const SCRIPT_KEYS = new Set(['description', 'level', 'runs', 'paths', 'check'])
 const FRONTMATTER_KEYS = new Set(['description', 'agent', 'model', 'effort', 'paths', 'allowed-tools', 'disallowed-tools', 'metadata'])
@@ -46,9 +48,9 @@ const LANGUAGES = ['typescript', 'tsx', 'javascript', 'html', 'css', 'php', 'pyt
 
 let astGrep: Promise<typeof import('@ast-grep/napi')> | undefined
 
-const loadedRules = new WeakMap<Settings, Promise<readonly LoadedRule[]>>()
+const loadedRules = new WeakMap<Settings, Promise<Rules>>()
 
-export function loadRules(settings: Settings): Promise<readonly LoadedRule[]> {
+export function loadRules(settings: Settings): Promise<Rules> {
   const known = loadedRules.get(settings)
   if (known !== undefined) return known
   const rules = rulesOf(settings)
@@ -56,23 +58,28 @@ export function loadRules(settings: Settings): Promise<readonly LoadedRule[]> {
   return rules
 }
 
-async function rulesOf(settings: Settings): Promise<readonly LoadedRule[]> {
+async function rulesOf(settings: Settings): Promise<Rules> {
   const rules: LoadedRule[] = [importsRule(settings), noSuppressionsRule]
+  const failures: string[] = []
+  const ids = new Set(rules.map(({ id }) => id))
   for (const config of settings.configs) {
     for (const [plugin, folder] of Object.entries(config.plugins)) {
       for (const path of [...RULE_FILES.scanSync({ cwd: folder })].filter((path) => !path.endsWith('.d.ts') && !path.endsWith('.test.ts')).sort()) {
-        const rule = await loadedRule(`${plugin}/${path.slice(0, path.lastIndexOf('.'))}`, join(folder, path), settings.timeout)
-        rules.push({ ...rule, paths: rule.paths && rootRelative(config.basePath, rule.paths) })
+        const id = `${plugin}/${path.slice(0, path.lastIndexOf('.'))}`
+        const source = join(folder, path)
+        if (ids.has(id)) throw new Error(`${source}: another file is already the rule ${id}. Give each rule its own name.`)
+        ids.add(id)
+        try {
+          const rule = await loadedRule(id, source, settings.timeout)
+          rules.push({ ...rule, paths: rule.paths && rootRelative(config.basePath, rule.paths) })
+        } catch (error) {
+          failures.push(`${error instanceof Error ? error.message : String(error)} The rule ${id} checks nothing until it loads.`)
+        }
       }
     }
   }
-  const ids = new Set<string>()
-  for (const { id, source } of rules) {
-    if (ids.has(id)) throw new Error(`${source}: another file is already the rule ${id}. Give each rule its own name.`)
-    ids.add(id)
-  }
   for (const id of Object.keys(settings.rules)) if (!ids.has(id)) throw new Error(`A rulebook config sets the rule "${id}", which no plugin holds. The rules are ${[...ids].join(', ')}.`)
-  return rules.map((rule) => overridden(rule, settings.rules[rule.id]))
+  return { rules: rules.map((rule) => overridden(rule, settings.rules[rule.id])), failures }
 }
 
 function loadedRule(id: string, source: string, timeout: number): Promise<LoadedRule> {
