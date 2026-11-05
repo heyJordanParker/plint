@@ -226,15 +226,24 @@ test('/rulebook lists every finding in the Sidebar', async () => {
   expect(await tested.shown.page.lines()).toEqual(['1 error, 0 warnings in 1 file', '', failure, '', 'Claude.md', '  3  error  global/block-em-dashes  Split the sentence at the em dash.'])
 })
 
-test("a rule that failed to load shows one warning toast per rules listing, and no check repeats it", async () => {
-  const failure = '/work/rules/block-x.ts: a rule needs a description. The rule dent/block-x checks nothing until it loads.'
-  const tested = serving({ rules: { ...LISTING, failures: [failure] }, edit: { failures: [], findings: [] } }, { projectRoot: '/work', files: FILES })
+test('each failure shows one warning toast per session, however often the rules load again or a check repeats it', async () => {
+  const failure = '/work/rules/block-x.ts: a rule needs a description. The rule app/block-x checks nothing until it loads.'
+  const skipped = 'mago did not run on a.php: mago is not installed'
+  const ticks: (() => void)[] = []
+  let modifiedAt = 1
+  const tested = testMod(rulebook, { projectRoot: '/work', files: FILES })
+  served(tested, () => ({ rules: { ...LISTING, failures: [failure] }, edit: { failures: [skipped], findings: [] } }))
+  tested.fakes.clock.every = (_ms: number, tick: () => void) => (ticks.push(tick), { cancel: () => undefined })
+  tested.fakes.fs.stat = async () => ({ kind: 'file', isLink: false, mtimeMs: modifiedAt, size: 1 })
   expect(await tested.raise.beforeSessionStart({ source: 'startup' })).toEqual({ note: "- Don't write em dashes." })
-  await tested.add({ type: Prompt, text: 'Edit the docs' })
-  expect(await read(tested, '/work/Claude.md')).toEqual({ note: "Rules for Claude.md:\n- Don't state a Fact the code contradicts." })
-  expect(await tested.raise.beforeToolCall({ name: 'Write', input: { file_path: '/work/Claude.md', content: 'x' } })).toBeUndefined()
+  await Bun.sleep(10)
+  modifiedAt = 2
+  for (const tick of ticks) tick()
+  await Bun.sleep(10)
+  for (const file of ['/work/a.php', '/work/b.php']) expect(await tested.raise.beforeToolCall({ name: 'Write', input: { file_path: file, content: 'x' } })).toBeUndefined()
   await tested.settle()
-  expect(tested.shown.toasts.filter(({ type }) => type !== 'success').map(({ type, message }) => ({ type, message }))).toEqual([{ type: 'warning', message: failure }])
+  expect(asked(tested, 'rules')).toHaveLength(2)
+  expect(tested.shown.toasts.filter(({ type }) => type !== 'success').map(({ type, message }) => ({ type, message }))).toEqual([{ type: 'warning', message: failure }, { type: 'warning', message: skipped }])
 })
 
 test('a rules listing that failed loads again on the next check, so the message checks go on once rulebook serve answers', async () => {

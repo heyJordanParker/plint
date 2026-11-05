@@ -2,6 +2,16 @@
 
 What changed in each version of rulebook, for the people who use it. cmod publish releases the section for the version, and Settings shows it.
 
+## [0.2.2]
+
+### Changed
+- `recommended` makes every CLAUDE.md, CLAUDE.local.md, AGENTS.md, and `.claude/` rule, agent, command, and Skill file a Prompt, so a config that only extends `recommended` checks them. Before, it checked nothing until a config listed `paths`.
+- Each rulebook warning, such as a rule that fails to load or a linter that did not run, shows once per session. Before, it showed again each time the rules reloaded and on every write it touched.
+- Two builds of one checkout at once no longer fail each other.
+- The README starts with an install section and a quick start that reaches a first refused write, and says what rulebook runs and what leaves your machine.
+- The released programs no longer hold the folder they were built in.
+- `rulebook --help` lists `--version`.
+
 ## [0.2.1]
 
 ### Changed

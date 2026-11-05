@@ -13,10 +13,20 @@ const PARSER_FOLDERS = {
 type Machine = keyof typeof PARSER_FOLDERS
 
 const root = import.meta.dir
-const archive = join(root, 'dist', 'linters.tgz')
+const archive = join(root, 'dist', `linters-${process.pid}.tgz`)
 const named = (process.env.CMOD_MACHINES || Object.keys(PARSER_FOLDERS).join(' ')).trim().split(/\s+/)
 const machines = named.filter((name): name is Machine => Object.hasOwn(PARSER_FOLDERS, name))
 if (machines.length < named.length) throw new Error(`CMOD_MACHINES names ${named.join(' ')}, and rulebook builds only ${Object.keys(PARSER_FOLDERS).join(' ')}.`)
+
+const embeddedParserPaths: Bun.BunPlugin = {
+  name: 'embedded-parser-paths',
+  setup(build) {
+    build.onLoad({ filter: /[\\/]@ast-grep[\\/]lang-[a-z]+[\\/]index\.js$/ }, async ({ path }) => ({
+      contents: (await Bun.file(path).text()).replaceAll('__dirname', JSON.stringify(`/$bunfs/root/${relative(root, dirname(path))}`)),
+      loader: 'js',
+    }))
+  },
+}
 
 process.chdir(root)
 try {
@@ -34,6 +44,7 @@ try {
       root,
       minify: true,
       naming: { asset: '[dir]/[name]-[hash].[ext]' },
+      plugins: [embeddedParserPaths],
       compile: { target: `bun-${machine}`, outfile: join(root, 'dist', `rulebook-${machine}`), autoloadDotenv: false, autoloadBunfig: false },
     })
   }

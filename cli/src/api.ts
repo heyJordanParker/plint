@@ -53,4 +53,7 @@ export function defineConfig(config: Config): Config {
   return config
 }
 
-export const recommended = defineConfig({ rules: { 'rulebook/imports': 'error' } })
+export const recommended = defineConfig({
+  paths: ['**/{CLAUDE,Claude}.md', '**/{CLAUDE,Claude}.local.md', '**/AGENTS.md', '**/.claude/{rules,agents,commands,skills}/**/*.md'],
+  rules: { 'rulebook/imports': 'error' },
+})

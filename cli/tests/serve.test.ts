@@ -136,14 +136,14 @@ test('two projects with different configs, checked through one server, each get 
   const other = join(home, 'other')
   mkdirSync(other)
   Bun.spawnSync(['git', 'init', '-q'], { cwd: other })
-  write(join(project, 'rulebook.config.ts'), "export default { plugins: { dent: './rules' }, rules: { 'global/block-hedging': 'off' } }\n")
-  write(join(project, 'rules', 'block-artisan.ts'), "export default { description: 'Run dnt, never php artisan.', check: ({ lines }) => lines.flatMap((text, index) => (text.includes('php artisan') ? [{ line: index + 1 }] : [])) }\n")
+  write(join(project, 'rulebook.config.ts'), "export default { plugins: { app: './rules' }, rules: { 'global/block-hedging': 'off' } }\n")
+  write(join(project, 'rules', 'block-npm-run.ts'), "export default { description: 'Run just, never npm run.', check: ({ lines }) => lines.flatMap((text, index) => (text.includes('npm run') ? [{ line: index + 1 }] : [])) }\n")
   write(join(other, 'rulebook.config.ts'), "export default { rules: { 'global/block-em-dashes': 'off' } }\n")
-  const text = `It probably works.\nRun php artisan ${EM_DASH} now.\n`
+  const text = `It probably works.\nRun npm run ${EM_DASH} now.\n`
   const rulesOf = async (cwd: string) => ((await ask('edit', written(join(cwd, 'Claude.md'), text, cwd))).answer as { findings: { rule: string }[] }).findings.map(({ rule }) => rule)
-  expect(await rulesOf(project)).toEqual(['dent/block-artisan', 'global/block-em-dashes'])
+  expect(await rulesOf(project)).toEqual(['app/block-npm-run', 'global/block-em-dashes'])
   expect(await rulesOf(other)).toEqual(['global/block-hedging'])
-  expect(await rulesOf(project)).toEqual(['dent/block-artisan', 'global/block-em-dashes'])
+  expect(await rulesOf(project)).toEqual(['app/block-npm-run', 'global/block-em-dashes'])
 })
 
 test('an edited stylelint.config.mjs takes effect on the next request, though the server keeps Stylelint loaded', async () => {
@@ -205,10 +205,10 @@ test("a Claude.md that a checked write creates brings its imports in, even when 
 })
 
 test('a config that fails on a missing plugin folder, a missing extends file, or an extends file that does not parse answers on the next request once that path is fixed', async () => {
-  const artisan = "export default { description: 'Run dnt, never php artisan.', check: ({ lines }) => lines.flatMap((text, index) => (text.includes('php artisan') ? [{ line: index + 1 }] : [])) }\n"
+  const npmRunRule = "export default { description: 'Run just, never npm run.', check: ({ lines }) => lines.flatMap((text, index) => (text.includes('npm run') ? [{ line: index + 1 }] : [])) }\n"
   const extending = "export default { extends: ['./shared.config.ts'] }\n"
   const cases = [
-    { name: 'plugin', config: "export default { plugins: { dent: './rules' } }\n", broken: undefined, fixed: ['rules/block-artisan.ts', artisan], rules: ['dent/block-artisan', 'global/block-em-dashes'] },
+    { name: 'plugin', config: "export default { plugins: { app: './rules' } }\n", broken: undefined, fixed: ['rules/block-npm-run.ts', npmRunRule], rules: ['app/block-npm-run', 'global/block-em-dashes'] },
     { name: 'extends', config: extending, broken: undefined, fixed: ['shared.config.ts', 'export default {}\n'], rules: ['global/block-em-dashes'] },
     { name: 'parse', config: extending, broken: ['shared.config.ts', 'export default {\n'], fixed: ['shared.config.ts', 'export default {}\n'], rules: ['global/block-em-dashes'] },
   ] as const
@@ -218,7 +218,7 @@ test('a config that fails on a missing plugin folder, a missing extends file, or
     Bun.spawnSync(['git', 'init', '-q'], { cwd: folder })
     write(join(folder, 'rulebook.config.ts'), config)
     if (broken !== undefined) write(join(folder, broken[0]), broken[1])
-    const edit = written(join(folder, 'Claude.md'), `Run php artisan ${EM_DASH} now.\n`, folder)
+    const edit = written(join(folder, 'Claude.md'), `Run npm run ${EM_DASH} now.\n`, folder)
     expect({ name, status: (await ask('edit', edit)).status }).toEqual({ name, status: 500 })
     write(join(folder, fixed[0]), fixed[1])
     const { status, answer } = await ask('edit', edit)

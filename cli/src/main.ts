@@ -21,6 +21,7 @@ Usage:
   rulebook text <@name>         Check the message on stdin, such as @reply, with every rule whose paths cover its @-name.
   rulebook rules                Print, for each folder that holds a rulebook.config.ts, each rule that is on there, with its description and the paths it covers, and each message with the tools that send it, as JSON.
   rulebook serve                Answer edit, text, and rules as POST /edit, /text, and /rules on a Unix socket, keeping each project's configs and rules loaded, and print unix:<socket path> first.
+  rulebook --version            Print the version.
 
 A file's rules and settings come from ~/.config/rulebook/rulebook.config.ts and the nearest rulebook.config.ts in the file's folder or a folder above it, with every config they extend.`
 
