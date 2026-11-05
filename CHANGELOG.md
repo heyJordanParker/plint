@@ -2,7 +2,7 @@
 
 What changed in each version of rulebook, for the people who use it. cmod publish releases the section for the version, and Settings shows it.
 
-## [Unreleased]
+## [0.2.0]
 
 ### Changed
 - plint is now rulebook. The program is `rulebook`, the package is `@cmodjs/rulebook`, the slash command is `/rulebook`, and the repository is `heyJordanParker/rulebook`.
