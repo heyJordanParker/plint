@@ -2,6 +2,11 @@
 
 What changed in each version of rulebook, for the people who use it. cmod publish releases the section for the version, and Settings shows it.
 
+## [0.2.4]
+
+### Changed
+- The mod bundles `@cmodjs/core` 5.13.1 and needs cmod 5.13.1 or later, so a busy session start no longer runs a rulebook check past the 10 seconds Claude Code gives a hook.
+
 ## [0.2.3]
 
 ### Changed
