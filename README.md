@@ -13,7 +13,7 @@ Edit to .claude/rules/testing.md refused. Fix every error, then edit again.
 
 ## Install
 
-rulebook is a mod for [Claude Mod Manager (cmod)](https://github.com/heyJordanParker/cmod), version 5.10.0 or later. With cmod installed, run:
+rulebook is a mod for [Claude Mod Manager (cmod)](https://github.com/heyJordanParker/cmod), version 5.13.0 or later. With cmod installed, run:
 
 ```sh
 cmod install heyJordanParker/rulebook
@@ -212,7 +212,7 @@ Rules for docs/CLAUDE.md:
 - Don't state a Fact the code contradicts.
 ```
 
-An agent reads each description once, until its context compacts. The mod loads the rules once per session with the `rules` answer of `rulebook serve`, which lists the rules of each folder that holds a `rulebook.config.ts`, and again when a rulebook config or rule file it lists changes. The mod shows each file the rules of its nearest folder in that list, and the session start shows the rules of the session's own folder.
+An agent reads each description once, until its context compacts. The mod loads the rules once per session with the `rules` answer of `rulebook serve`, which lists the rules of each folder that holds a `rulebook.config.ts`, and again at the session's next check after a rulebook config or rule file it lists changes, so a session that sits idle asks nothing. The mod shows each file the rules of its nearest folder in that list, and the session start shows the rules of the session's own folder.
 
 ## Prove a rule with a probe
 
@@ -262,7 +262,7 @@ These are the medians of 20 checks, a fresh `rulebook edit` process against the 
 | An edit to an existing file, 485-file repository | 52.9 ms | 0.6 ms |
 | An edit to an existing file, 29,618-file repository | 628.3 ms | 0.5 ms |
 
-Biome, oxlint, Mago, ruff, selene, shellcheck, and each agentic rule's Claude Code session still start per write, because none of them lints pending text in process with the findings its own command line gives. A server that is down, or a config that fails to load, fails each check with an error toast and lets the write through, so a broken setup never blocks an agent's work. A rule file that fails to load is skipped, every other rule keeps checking, and its failure shows once as a warning. The `rulebook` command keeps working on its own, for full runs and CI.
+Biome, oxlint, Mago, ruff, selene, shellcheck, and each agentic rule's Claude Code session still start per write, because none of them lints pending text in process with the findings its own command line gives. A server that is down, or a config that fails to load, fails each check with an error toast and lets the write through, so a broken setup never blocks an agent's work. A rule file that fails to load is skipped, and every other rule keeps checking. Its failure shows as one warning toast, in the first session that loads the rules after the rule broke, whatever number of sessions and projects you run, and shows again only once a load found it fixed and it broke again. A rule or linter that did not run on a write tells the agent in the write's note, and goes to the Log in cmod's Settings as a warning. The `rulebook` command keeps working on its own, for full runs and CI.
 
 ## What runs and what leaves your machine
 

@@ -2,6 +2,16 @@
 
 What changed in each version of rulebook, for the people who use it. cmod publish releases the section for the version, and Settings shows it.
 
+## [0.2.3]
+
+### Changed
+- A rule file that fails to load shows one warning toast, in the first session that loads the rules after it broke, whatever number of sessions and projects you run. It shows again only once a load found it fixed and it broke again. Before, every session showed it once, so 30 sessions showed it 30 times, each at a time no one could predict.
+- A rule or linter that did not run on a write goes to the Log in cmod's Settings as a warning, beside the note the agent reads. Before, it showed a warning toast in each session it happened in.
+- After a rulebook config or rule file changes, a session loads the rules again at its next check, instead of every open session asking `rulebook serve` at the same moment.
+- The `rules` answer of `rulebook serve` lists each failure only the first time, until a listing of the same project no longer holds it. `rulebook rules` still lists every failure.
+- The mod bundles `@cmodjs/core` 5.13.0 and needs cmod 5.13.0 or later, so a session start that cmod answers late is a warning in the Log, never an error.
+- Each push to `main` with a new version releases the mod and the `rulebook` programs on GitHub, and publishes `@cmodjs/rulebook` to npm, from GitHub Actions.
+
 ## [0.2.2]
 
 ### Changed
