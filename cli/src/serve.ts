@@ -1,7 +1,7 @@
 import { rmSync, statSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { isRecord } from './config.ts'
+import { isRecord, isStrings } from './config.ts'
 import { isQuestion, projectOf, type Question } from './questions.ts'
 import type { Answered, Asked } from './worker.ts'
 
@@ -23,6 +23,8 @@ type Project = {
 export async function serve(): Promise<never> {
   const socket = join(tmpdir(), `rulebook-${process.pid}.sock`)
   const projects = new Map<string, Project>()
+  const failing = new Map<string, readonly string[]>()
+  const shown = new Set<string>()
   let lastId = 0
 
   const stop = (project: Project): void => {
@@ -56,14 +58,23 @@ export async function serve(): Promise<never> {
     return project
   }
 
-  const projectFor = (root: string, environment: Environment): Project => {
-    const key = `${root}\0${JSON.stringify(environment)}`
+  const projectFor = (key: string, root: string, environment: Environment): Project => {
     const known = projects.get(key)
     if (known !== undefined && !isStale(known)) return known
     if (known !== undefined) stop(known)
     const project = started(key, root, environment)
     projects.set(key, project)
     return project
+  }
+
+  const unshown = (key: string, listing: unknown): unknown => {
+    if (!isRecord(listing) || !isStrings(listing.failures)) return listing
+    const { failures } = listing
+    for (const fixed of failing.get(key) ?? []) if (!failures.includes(fixed)) shown.delete(fixed)
+    failing.set(key, failures)
+    const fresh = failures.filter((failure) => !shown.has(failure))
+    for (const failure of fresh) shown.add(failure)
+    return { ...listing, failures: fresh }
   }
 
   const ask = (project: Project, question: Question, input: unknown, root: string): Promise<unknown> => {
@@ -85,7 +96,10 @@ export async function serve(): Promise<never> {
         const body: unknown = await request.json()
         if (!isRecord(body)) throw new Error('rulebook serve reads {"input", "environment"}.')
         const root = projectOf(question, body.input)
-        return Response.json(await ask(projectFor(root, environmentOf(body.environment)), question, body.input, root))
+        const environment = environmentOf(body.environment)
+        const key = `${root}\0${JSON.stringify(environment)}`
+        const answered = await ask(projectFor(key, root, environment), question, body.input, root)
+        return Response.json(question === 'rules' ? unshown(key, answered) : answered)
       } catch (error) {
         return new Response(error instanceof Error ? error.message : String(error), { status: 500 })
       }

@@ -125,7 +125,7 @@ test('a subagent gets the session-start rules as it starts, and the file rules o
   expect(await read(tested, '/work/Claude.md', task)).toBeUndefined()
 })
 
-test('the rules load again after a rulebook config or rule file changes', async () => {
+test('the rules load again at the next check after a rulebook config or rule file changes, never at the change itself, so the sessions that sit idle ask nothing', async () => {
   const ticks: (() => void)[] = []
   let modifiedAt = 1
   let listing: typeof LISTING = LISTING
@@ -139,6 +139,7 @@ test('the rules load again after a rulebook config or rule file changes', async 
   modifiedAt = 2
   for (const tick of ticks) tick()
   await Bun.sleep(10)
+  expect(asked(tested, 'rules')).toHaveLength(1)
   expect(await tested.raise.beforeSessionStart({ source: 'compact' })).toEqual({ note: "- Don't write em dashes.\n- State a claim only once you checked it." })
   expect(asked(tested, 'rules')).toHaveLength(2)
 })
@@ -156,10 +157,14 @@ test('warnings from rulebook reach the agent beside the edit', async () => {
   expect(await tested.raise.beforeToolCall({ name: 'Write', input: { file_path: '/work/Claude.md', content: 'x' } })).toEqual({ note: 'Edit to Claude.md allowed with warnings:' })
 })
 
-test('a rule that did not run shows a toast, and the edit goes on', async () => {
-  const tested = serving({ rules: LISTING, edit: { failures: ['global/block-domain-words-for-code did not run on Claude.md: it ran past 30 s'] } })
-  expect(await tested.raise.beforeToolCall({ name: 'Write', input: { file_path: '/work/Claude.md', content: 'x' } })).toBeUndefined()
-  expect(tested.shown.toasts.map(({ message }) => message)).toContain('global/block-domain-words-for-code did not run on Claude.md: it ran past 30 s')
+test('a rule that did not run goes to the Log as a warning with no toast, and the edit goes on with its note', async () => {
+  const skipped = 'global/block-domain-words-for-code did not run on Claude.md: it ran past 30 s'
+  const note = `Edit to Claude.md allowed, but not every rule checked it:\n\n${skipped}`
+  const tested = serving({ rules: LISTING, edit: { note, failures: [skipped], findings: [] } })
+  expect(await tested.raise.beforeToolCall({ name: 'Write', input: { file_path: '/work/Claude.md', content: 'x' } })).toEqual({ note })
+  await tested.settle()
+  expect(tested.shown.debug).toContainEqual(expect.stringContaining(skipped))
+  expect(tested.shown.toasts.filter(({ type }) => type !== 'success')).toEqual([])
 })
 
 test('a rulebook serve that cannot start fails each check with an error toast, and checks the edit no other way', async () => {
@@ -226,24 +231,25 @@ test('/rulebook lists every finding in the Sidebar', async () => {
   expect(await tested.shown.page.lines()).toEqual(['1 error, 0 warnings in 1 file', '', failure, '', 'Claude.md', '  3  error  global/block-em-dashes  Split the sentence at the em dash.'])
 })
 
-test('each failure shows one warning toast per session, however often the rules load again or a check repeats it', async () => {
+test('a rule that failed to load shows a warning toast when a rules listing names it, and a listing that rulebook serve already gave it to names it no more', async () => {
   const failure = '/work/rules/block-x.ts: a rule needs a description. The rule app/block-x checks nothing until it loads.'
-  const skipped = 'mago did not run on a.php: mago is not installed'
   const ticks: (() => void)[] = []
   let modifiedAt = 1
+  let failures = [failure]
   const tested = testMod(rulebook, { projectRoot: '/work', files: FILES })
-  served(tested, () => ({ rules: { ...LISTING, failures: [failure] }, edit: { failures: [skipped], findings: [] } }))
+  served(tested, () => ({ rules: { ...LISTING, failures } }))
   tested.fakes.clock.every = (_ms: number, tick: () => void) => (ticks.push(tick), { cancel: () => undefined })
   tested.fakes.fs.stat = async () => ({ kind: 'file', isLink: false, mtimeMs: modifiedAt, size: 1 })
   expect(await tested.raise.beforeSessionStart({ source: 'startup' })).toEqual({ note: "- Don't write em dashes." })
   await Bun.sleep(10)
+  failures = []
   modifiedAt = 2
   for (const tick of ticks) tick()
   await Bun.sleep(10)
-  for (const file of ['/work/a.php', '/work/b.php']) expect(await tested.raise.beforeToolCall({ name: 'Write', input: { file_path: file, content: 'x' } })).toBeUndefined()
+  expect(await read(tested, '/work/notes.md')).toBeUndefined()
   await tested.settle()
   expect(asked(tested, 'rules')).toHaveLength(2)
-  expect(tested.shown.toasts.filter(({ type }) => type !== 'success').map(({ type, message }) => ({ type, message }))).toEqual([{ type: 'warning', message: failure }, { type: 'warning', message: skipped }])
+  expect(tested.shown.toasts.filter(({ type }) => type !== 'success').map(({ type, message }) => ({ type, message }))).toEqual([{ type: 'warning', message: failure }])
 })
 
 test('a rules listing that failed loads again on the next check, so the message checks go on once rulebook serve answers', async () => {

@@ -119,6 +119,27 @@ test('a rule file edited on disk takes effect on the next request, and a new rul
   expect(await ask('edit', written(claudeMd, `Run it ${EM_DASH} now.\n`))).toEqual({ status: 200, answer: { failures: [], findings: [] } })
 })
 
+test('a rule that fails to load is listed by one rules answer across every session and project, until a load finds it fixed, and is listed again when it breaks again', async () => {
+  const other = join(home, 'other')
+  mkdirSync(other)
+  Bun.spawnSync(['git', 'init', '-q'], { cwd: other })
+  const rule = join(home, 'config', 'rulebook', 'rules', 'block-x.ts')
+  const broken = `${rule}: a rule needs a description: the Rule in one line of plain words, such as "Don't write em dashes." The rule global/block-x checks nothing until it loads.`
+  const failuresOf = async (cwd: string) => ((await ask('rules', { cwd })).answer as { failures: readonly string[] }).failures
+  write(rule, 'export default { check: () => [] }\n')
+  expect(await failuresOf(project)).toEqual([broken])
+  expect(await failuresOf(project)).toEqual([])
+  expect(await failuresOf(other)).toEqual([])
+  write(join(project, 'Claude.md'), 'A fact.\n')
+  expect(await failuresOf(project)).toEqual([])
+  write(rule, "export default { description: 'Write x.', check: () => [] }\n")
+  expect(await failuresOf(project)).toEqual([])
+  write(rule, 'export default { check: () => [] }\n')
+  expect(await failuresOf(other)).toEqual([broken])
+  expect(await failuresOf(project)).toEqual([])
+  expect((rulebook(['rules'], '') as { failures: readonly string[] }).failures).toEqual([broken])
+})
+
 test.if(process.platform === 'darwin')("rulebook serve's physical footprint stops growing: idle after edit 500 of a rule file, each edit followed by a request and a worker replacement, it stays under 1.5 times its idle footprint after edit 100", async () => {
   const rule = join(home, 'config', 'rulebook', 'rules', 'block-em-dashes.ts')
   const idle: number[] = []
