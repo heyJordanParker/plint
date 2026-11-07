@@ -13,7 +13,7 @@ Edit to .claude/rules/testing.md refused. Fix every error, then edit again.
 
 ## Install
 
-rulebook is a mod for [Claude Mod Manager (cmod)](https://github.com/heyJordanParker/cmod), version 5.13.0 or later. With cmod installed, run:
+rulebook is a mod for [Claude Mod Manager (cmod)](https://github.com/heyJordanParker/cmod), version 5.13.1 or later. With cmod installed, run:
 
 ```sh
 cmod install heyJordanParker/rulebook
