@@ -2,6 +2,11 @@
 
 What changed in each version of rulebook, for the people who use it. cmod publish releases the section for the version, and Settings shows it.
 
+## [0.2.5]
+
+### Changed
+- `npm install @cmodjs/rulebook` installs the newest version again. A rerun of the 0.2.3 release published 0.2.3 after 0.2.4, and npm tagged it `latest`. A release run for an older version than the one on `main` now releases nothing.
+
 ## [0.2.4]
 
 ### Changed

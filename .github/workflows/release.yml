@@ -34,7 +34,11 @@ jobs:
           if npm view "@cmodjs/rulebook@$version" version > /dev/null 2>&1; then echo "npm=done" >> "$GITHUB_OUTPUT"; fi
           if git ls-remote --exit-code --tags origin "refs/tags/v$version" > /dev/null; then echo "release=done" >> "$GITHUB_OUTPUT"; fi
           git fetch --quiet origin main
-          if ! git diff --quiet "$GITHUB_SHA" FETCH_HEAD -- .github/workflows; then
+          newest=$(git show FETCH_HEAD:.claude-plugin/plugin.json | jq -r .version)
+          if [ "$newest" != "$version" ]; then
+            echo "::notice::main is on version $newest, and npm tags the last version published as latest, so the run for main releases"
+            echo "later=true" >> "$GITHUB_OUTPUT"
+          elif ! git diff --quiet "$GITHUB_SHA" FETCH_HEAD -- .github/workflows; then
             echo "::notice::main's .github/workflows changed since $GITHUB_SHA, and GitHub refuses this run's token a tag whose workflows differ from main's, so the run for main releases"
             echo "later=true" >> "$GITHUB_OUTPUT"
           fi
